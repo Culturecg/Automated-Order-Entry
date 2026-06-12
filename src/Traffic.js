@@ -138,8 +138,12 @@ function makeCar(type, rng) {
   if (type === 'van') { L = 5.0; W = 2.0; H = 0.7; cabH = 1.0; cabLen = 3.2; cabOff = -0.3; }
   if (type === 'sports') { L = 4.2; W = 1.95; H = 0.45; cabH = 0.36; cabLen = 1.7; }
 
-  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.55, envMapIntensity: 1.0 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.1, metalness: 0.7 });
+  // patina: worn paint (rougher, a little grime in the metalness/colour)
+  const worn = new THREE.Color(color).multiplyScalar(0.82 + rng() * 0.12);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: worn, roughness: 0.5 + rng() * 0.25, metalness: 0.45, envMapIntensity: 0.85 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x12161c, roughness: 0.08, metalness: 0.8 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x202227, roughness: 0.7, metalness: 0.5 });
+  const dirtMat = new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 0.95 });
 
   // lower body
   const lower = new THREE.Mesh(new THREE.BoxGeometry(W, H, L), bodyMat);
@@ -164,6 +168,23 @@ function makeCar(type, rng) {
     sign.position.set(0, 0.45 + H + cabH + 0.12, cabOff);
     group.add(sign);
   }
+  // grimy lower rocker band (road dirt), bumpers, grille, side window strip, plate
+  const rocker = new THREE.Mesh(new THREE.BoxGeometry(W + 0.02, 0.18, L * 0.96), dirtMat);
+  rocker.position.y = 0.45; group.add(rocker);
+  for (const sz of [1, -1]) {
+    const bump = new THREE.Mesh(new THREE.BoxGeometry(W * 0.96, 0.18, 0.18), trimMat);
+    bump.position.set(0, 0.5, sz * L / 2); group.add(bump);
+  }
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(W * 0.5, 0.16, 0.05), trimMat);
+  grille.position.set(0, 0.62, L / 2 + 0.01); group.add(grille);
+  for (const sx of [-1, 1]) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.02, cabH * 0.6, cabLen * 0.8), glassMat);
+    win.position.set(sx * (W * 0.43), 0.45 + H + cabH * 0.55, cabOff); group.add(win);
+  }
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0xe8e4cc, roughness: 0.7 }));
+  plate.position.set(0, 0.5, -L / 2 - 0.02); group.add(plate);
+
   // headlights + taillights
   const head = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 0.8 });
   const tail = new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff2222, emissiveIntensity: 0.7 });

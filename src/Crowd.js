@@ -77,7 +77,7 @@ export class Crowd {
     this.enemies.push({
       person, role: 'robber', pos, vel: new THREE.Vector3(), state: 'approach',
       hp: ROBBER_HP, maxhp: ROBBER_HP, victim, robTimer: 0, boundT: 0, hitsBound: 0,
-      atkCd: 1, stagger: 0, downed: 0, blockCd: 0,
+      atkCd: 1, stagger: 0, downed: 0, blockCd: 0, windup: 0,
     });
   }
 
@@ -90,7 +90,7 @@ export class Crowd {
     this.boss = {
       person, role: 'boss', pos, vel: new THREE.Vector3(), state: 'fight',
       hp: BOSS_HP, maxhp: BOSS_HP, victim: null, robTimer: 0, boundT: 0, hitsBound: 0,
-      atkCd: 1.5, stagger: 0, downed: 0, blockCd: 0,
+      atkCd: 1.5, stagger: 0, downed: 0, blockCd: 0, windup: 0,
     };
     this.enemies.push(this.boss);
     this.bossSpawned = true;
@@ -130,12 +130,12 @@ export class Crowd {
     dt = Math.min(dt, 0.05);
     const player = this.player;
 
-    // spawn robberies until the boss, then hold
+    // spawn robberies until the boss — one at a time, spaced 20-60s apart so
+    // there are real lulls in the action.
     if (!this.bossSpawned && !this.bossDefeated) {
       this.robberyCooldown -= dt;
-      const active = this.enemies.some((e) => e.role === 'robber' && e.state !== 'down');
-      if (this.robberyCooldown <= 0 && this._activeRobberies() < 2) {
-        this._spawnRobber(); this.robberyCooldown = 7 + Math.random() * 6;
+      if (this.robberyCooldown <= 0 && this._activeRobberies() < 1) {
+        this._spawnRobber(); this.robberyCooldown = 20 + Math.random() * 40;
       }
       if (this.neutralized >= 15) this._spawnBoss();
     }
@@ -143,6 +143,20 @@ export class Crowd {
     this._updatePeds(dt);
     this._updateEnemies(dt);
     this._resolvePlayerMelee();
+    this._updateSoftLock();
+  }
+
+  // Soft-lock: tell the player which thug to focus so attacks track them.
+  _updateSoftLock() {
+    let best = null, bd = 7.5, prio = -1;
+    for (const e of this.enemies) {
+      if (e.state === 'down') continue;
+      const d = e.pos.distanceTo(this.player.pos);
+      if (d > bd) continue;
+      const p = e.state === 'bound' ? 3 : e.state === 'fight' ? 2 : 1;
+      if (p > prio || (p === prio && d < bd)) { prio = p; best = e; bd = Math.min(bd, d + 0.01); }
+    }
+    this.player.lockTarget = best ? best.pos : null;
   }
 
   _activeRobberies() {
@@ -214,15 +228,26 @@ export class Crowd {
           break;
         }
         case 'fight': {
-          if (distP > 9) { e.state = 'flee'; break; }
-          // close in, keep a little spacing, attack on cooldown
-          const want = 1.7;
-          if (distP > want + 0.3) e.vel.lerp(toPlayer.clone().normalize().multiplyScalar(3.5), 0.1);
-          else e.vel.multiplyScalar(0.7);
-          if (e.atkCd <= 0 && distP < 2.3 && e.stagger <= 0 && player._downed <= 0) {
-            const dir = toPlayer.clone().normalize();
-            player.takeHit(dir, e.role === 'boss' ? 20 : 8);
-            e.atkCd = e.role === 'boss' ? 1.1 : 1.5;
+          if (distP > 9 && e.role !== 'boss') { e.state = 'flee'; break; }
+          const want = 1.8;
+          if (e.windup <= 0) {
+            if (distP > want + 0.3) e.vel.lerp(toPlayer.clone().normalize().multiplyScalar(e.role === 'boss' ? 4.2 : 3.5), 0.1);
+            else e.vel.multiplyScalar(0.7);
+          } else {
+            e.vel.multiplyScalar(0.6); // plant for the strike
+          }
+          // telegraph → strike, with randomized cadence so it isn't a metronome
+          if (e.windup > 0) {
+            e.windup -= dt;
+            if (e.windup <= 0) {
+              if (distP < 2.7 && e.stagger <= 0) {
+                const dir = toPlayer.clone().normalize();
+                player.takeHit(dir, e.role === 'boss' ? 20 : 8);
+              }
+              e.atkCd = (e.role === 'boss' ? 0.9 : 1.5) + Math.random() * (e.role === 'boss' ? 0.7 : 1.2);
+            }
+          } else if (e.atkCd <= 0 && distP < 2.5 && e.stagger <= 0 && player._downed <= 0) {
+            e.windup = e.role === 'boss' ? 0.5 : 0.4; // readable wind-up you can block/beat
           }
           pose = 'fight'; break;
         }
@@ -266,20 +291,25 @@ export class Crowd {
     if (!hit) return;
     player.strikeImpact = null;
     const fdir = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
-    let target = null, bestD = 2.8;
+    let target = null, bestD = 3.4;
     for (const e of this.enemies) {
       if (e.state === 'down') continue;
       const to = this._tmp.subVectors(e.pos, player.pos); to.y = 0;
       const d = to.length();
-      if (d > bestD) continue;
-      if (to.normalize().dot(fdir) < 0.1 && d > 1.2) continue; // must be roughly in front
-      target = e; bestD = d;
+      // strongly prefer whatever the soft-lock is on (forgiving range/cone)
+      const isLock = player.lockTarget && e.pos === player.lockTarget;
+      const reach = isLock ? 4.2 : 3.4;
+      if (d > reach) continue;
+      if (!isLock && to.normalize().dot(fdir) < 0.0 && d > 1.4) continue; // roughly in front
+      if (isLock) { target = e; break; }   // lock wins outright
+      if (d < bestD) { target = e; bestD = d; }
     }
     if (!target) return;
 
     const bound = target.state === 'bound';
-    // unbound enemies can block & counter (a "good fight")
-    if (!bound && target.blockCd <= 0 && Math.random() < 0.3) {
+    // unbound enemies can block & counter (a "good fight") — but less often,
+    // so your soft-locked combos actually connect
+    if (!bound && target.blockCd <= 0 && Math.random() < 0.2) {
       target.blockCd = 1.0;
       // counter: shove the player a touch
       const dir = new THREE.Vector3().subVectors(player.pos, target.pos).setY(0).normalize();

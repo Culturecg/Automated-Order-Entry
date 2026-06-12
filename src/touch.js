@@ -67,6 +67,8 @@ export function setupTouchControls(input) {
   // melee — each tap is one combo hit (tap fast to chain the 3-hit string)
   makeButton('PUNCH', 'btn-punch', { onPress: () => { input.punchPressed = true; } });
   makeButton('KICK', 'btn-kick', { onPress: () => { input.kickPressed = true; } });
+  // hold to block/guard
+  makeButton('BLOCK', 'btn-block', { hold: true, code: 'KeyL' });
   // small utility buttons
   makeButton('CAM', 'btn-cam', { hold: true, code: 'KeyC' });
   makeButton('⟳', 'btn-respawn', { hold: true, code: 'KeyR' });

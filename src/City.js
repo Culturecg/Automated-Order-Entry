@@ -20,7 +20,56 @@ export class City {
     this._buildBuildings();
     this._buildSidewalks();
     this._buildStreetDressing();
+    this._buildGreeneryAndProps();
     this._scatterRoofProps();
+  }
+
+  // Trees, planters, trash cans, newsstands — a more lived-in street.
+  _buildGreeneryAndProps() {
+    const rng = mulberry32(555);
+    const pitch = this.blockSize + this.street;
+    const start = -this.half + this.blockSize / 2;
+    const inPlaza = (x, z) => Math.abs(x) < pitch && Math.abs(z) < pitch;
+    const m4 = new THREE.Matrix4();
+
+    const trunks = [], cans = [];
+    for (let gx = 0; gx < this.blocks; gx++) for (let gz = 0; gz < this.blocks; gz++) {
+      const cx = start + gx * pitch, cz = start + gz * pitch;
+      if (inPlaza(cx, cz)) continue;
+      const edge = this.blockSize / 2 + 2.6;
+      // a row of street trees along two sides
+      for (let t = -1; t <= 1; t++) {
+        if (rng() < 0.35) trunks.push([cx + t * (this.blockSize * 0.3), cz - edge]);
+        if (rng() < 0.35) trunks.push([cx + t * (this.blockSize * 0.3), cz + edge]);
+      }
+      if (rng() < 0.5) cans.push([cx - edge, cz + (rng() - 0.5) * this.blockSize]);
+    }
+
+    // trees: instanced trunk + two foliage blobs
+    const trunkIM = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.16, 0.22, 3, 6),
+      new THREE.MeshStandardMaterial({ color: 0x4a3526, roughness: 0.95 }), trunks.length);
+    const foliageGeo = new THREE.IcosahedronGeometry(1.6, 1);
+    const foliageIM = new THREE.InstancedMesh(
+      foliageGeo, new THREE.MeshStandardMaterial({ color: 0x2f6b33, roughness: 0.9, flatShading: true }), trunks.length * 2);
+    const sV = new THREE.Vector3(1, 1, 1);
+    const q = new THREE.Quaternion();
+    trunks.forEach(([x, z], i) => {
+      m4.makeTranslation(x, 1.5, z); trunkIM.setMatrixAt(i, m4);
+      q.identity();
+      m4.compose(new THREE.Vector3(x, 3.4, z), q, new THREE.Vector3(1.1, 1.0, 1.1)); foliageIM.setMatrixAt(i * 2, m4);
+      m4.compose(new THREE.Vector3(x + 0.6, 3.0, z - 0.3), q, new THREE.Vector3(0.8, 0.8, 0.8)); foliageIM.setMatrixAt(i * 2 + 1, m4);
+    });
+    trunkIM.castShadow = foliageIM.castShadow = true;
+    this.scene.add(trunkIM, foliageIM);
+
+    // trash cans
+    const canIM = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.32, 0.28, 0.9, 8),
+      new THREE.MeshStandardMaterial({ color: 0x35393f, roughness: 0.8, metalness: 0.3 }), cans.length);
+    cans.forEach(([x, z], i) => { m4.makeTranslation(x, 0.45, z); canIM.setMatrixAt(i, m4); });
+    canIM.castShadow = true;
+    this.scene.add(canIM);
   }
 
   _buildGround() {

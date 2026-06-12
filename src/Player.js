@@ -142,6 +142,9 @@ export class Player {
     this._downed = 0;             // seconds knocked down (can't act)
     this.strikeImpact = null;     // {power} on the frame a strike connects
     this._impacted = false;
+    this.lockTarget = null;       // THREE.Vector3 of the soft-locked enemy (set by Crowd)
+    this._blocking = false;
+    this._flip = 0;               // remaining flip spin (radians) for web-jump tricks
 
     this.model = createSpiderMan();
     scene.add(this.model.root);
@@ -253,7 +256,12 @@ export class Player {
     if (this.health < 100) this.health = Math.min(100, this.health + dt * 4);
     if (this._downed > 0) this._downed -= dt;
     const locked = this._downed > 0;
-    if (locked) { move.set(0, 0, 0); hasInput = false; this._moveMag = 0; }
+
+    // block/guard: hold to brace — greatly cuts damage & prevents knockdown.
+    // Can't move or attack while guarding (stand your ground, time it).
+    this._blocking = !locked && (this.state === 'ground') && input.down('KeyL');
+
+    if (locked || this._blocking) { move.set(0, 0, 0); hasInput = false; this._moveMag = 0; }
 
     // ---- combat: rapid taps chain a 3-hit combo (jab-cross-uppercut /
     //      low-high-360). Hold RUN while striking for the alternate string. ----
@@ -268,9 +276,20 @@ export class Player {
       this.strikeImpact = { type: a.type, power: a.step };
     }
 
-    const canAttack = !locked && (this.state === 'ground' || this.state === 'air');
+    const canAttack = !locked && !this._blocking && (this.state === 'ground' || this.state === 'air');
     if (canAttack && input.punchPressed) this._strike('punch', sprint);
     if (canAttack && input.kickPressed) this._strike('kick', sprint);
+
+    // soft-lock: face the focused thug when fighting near him, so strikes land
+    if (this.lockTarget && (this._atk.type || !hasInput) && this.state !== 'swing') {
+      const dx = this.lockTarget.x - this.pos.x, dz = this.lockTarget.z - this.pos.z;
+      if (dx * dx + dz * dz > 0.04) {
+        const want = Math.atan2(dx, dz);
+        let d = want - this.facing;
+        while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+        this.facing += d * Math.min(1, dt * (this._atk.type ? 18 : 8));
+      }
+    }
 
     // ---- web input (tap: bind a nearby bad guy if aimed at one, else swing) ----
     if (input.webPressed && !locked) {
@@ -338,20 +357,34 @@ export class Player {
   // onto his fanny (briefly downed) — so you have to fight smart.
   takeHit(dir, power) {
     if (this._downed > 0) return;
+    // blocking guts the damage and prevents the knockdown — just a shove
+    if (this._blocking) {
+      this.health = Math.max(0, this.health - power * 0.15);
+      this.vel.addScaledVector(dir, 3);
+      return;
+    }
     this.health = Math.max(0, this.health - power);
     this._atk.type = null;
+    this.releaseWeb();
     if (power >= 16) {
-      this.releaseWeb();
-      this.vel.set(dir.x * 9, 8, dir.z * 9);
+      // big hit: flung backward off his feet, lands on his back/butt
+      this.vel.set(dir.x * 13, 9.5, dir.z * 13);
       this.state = 'air';
-      this._downed = 1.3;          // sat down, recovering
+      this._downed = 1.6;
     } else {
-      this.vel.addScaledVector(dir, 6); // shoved back / slowed
+      // small hit: shoved back & slowed, brief stagger (stays on his feet)
+      this.vel.x += dir.x * 7; this.vel.z += dir.z * 7;
+      this._downed = Math.max(this._downed, 0.28);
     }
-    if (this.health <= 0) { this.health = 100; this._downed = Math.max(this._downed, 2.2); }
+    if (this.health <= 0) { this.health = 100; this._downed = Math.max(this._downed, 2.4); }
   }
 
   _strike(type, heavy) {
+    // snap to face the locked thug so the hit is aimed
+    if (this.lockTarget) {
+      const dx = this.lockTarget.x - this.pos.x, dz = this.lockTarget.z - this.pos.z;
+      if (dx * dx + dz * dz > 0.04) this.facing = Math.atan2(dx, dz);
+    }
     const a = this._atk;
     // continue the string if we're mid-combo of the same type, else start fresh
     const chaining = a.type === type && this._comboWindow > 0 && a.step < 2;
@@ -460,6 +493,10 @@ export class Player {
       this.vel.multiplyScalar(1.06);  // keep the momentum
       this.vel.y += 10;               // strong upward kick off the web
       this.state = 'air';
+      // TRICK: only when launching UP with real momentum (a well-timed jump near
+      // the upswing) does he flip — never off the bottom of the arc.
+      const hs = Math.hypot(this.vel.x, this.vel.z);
+      if (this.vel.y > 12 && hs > 16) this._flip = Math.PI * 2;
     }
 
     // face direction of travel
@@ -567,9 +604,16 @@ export class Player {
       // upright, plus any 360-spin-kick body rotation
       targetQuat.setFromEuler(new THREE.Euler(0, this.facing + this._spinYaw, 0));
     }
-    // snap instantly during the spin so the 360 reads; otherwise smooth
-    const rate = this.state === 'swing' ? 5 : (this._spinYaw > 0 ? 30 : 9);
+    // swing is now smoother/more fluid; snap during the spin so the 360 reads
+    const rate = this.state === 'swing' ? 7 : (this._spinYaw > 0 ? 30 : 9);
     this.model.root.quaternion.slerp(targetQuat, Math.min(1, dt * rate));
+
+    // mid-air trick flip off a high web-jump launch
+    if (this._flip > 0) {
+      this._flip = Math.max(0, this._flip - dt * (Math.PI * 2 / 0.7));
+      const done = Math.PI * 2 - this._flip;            // 0 → 2π
+      this.model.root.rotateX(done);
+    }
 
     this.model.root.position.copy(this.pos);
     this.model.root.position.y -= RADIUS; // feet to ground
@@ -577,7 +621,8 @@ export class Player {
     const attacking = this._atk.type && this._atk.t < this._atk.dur;
     let pose = 'idle';
     const h = Math.hypot(this.vel.x, this.vel.z);
-    if (this._downed > 0 && this.state !== 'air') pose = 'land';   // knocked down / recovering
+    if (this._downed > 0 && this.state !== 'air') pose = 'downed'; // on his back/butt
+    else if (this._blocking) pose = 'block';
     else if (this.state === 'swing') pose = 'swing';
     else if (this.state === 'wall') pose = 'climb';
     else if (this.state === 'air') pose = 'air';
