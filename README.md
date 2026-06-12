@@ -42,6 +42,18 @@ and **click the screen** to lock the mouse and start swinging.
 | `C` | Cycle camera distance |
 | `R` | Respawn at city center |
 
+### On iPhone / touch devices (PUBG-style)
+Touch controls appear automatically on phones and tablets:
+- **Left thumb** — floating virtual joystick to move (analog: push further = faster).
+- **Right side** — drag anywhere to look / aim the camera.
+- **WEB** (big red button) — shoot web & swing; tap again to release.
+- **JUMP**, **RUN** (sprint, hold), **CLING** (wall-crawl, hold).
+- Small top-right buttons: **CAM** (camera distance) and **⟳** (respawn).
+
+**Open it on an iPhone via GitHub Pages:** once the Pages deploy finishes, visit
+`https://culturecg.github.io/automated-order-entry/` in Safari, then tap
+**CLICK TO SWING IN**. (See repo Actions tab for the live URL/status.)
+
 ### Web-swing tips
 - Swing physics are a real pendulum: hold **W** at the bottom of an arc to *pump*
   and build speed, then tap **Space** to launch into the next swing.

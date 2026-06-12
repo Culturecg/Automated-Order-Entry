@@ -149,3 +149,82 @@ kbd {
   transition: transform 0.15s, box-shadow 0.15s;
 }
 #start-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(230,36,41,0.6); }
+
+/* ---------- Touch controls (PUBG-style) ---------- */
+/* Hidden by default; shown only when JS adds .touch to <body>. */
+#touch-ui { display: none; }
+
+body.touch #controls { display: none; }   /* hide desktop key list on phones */
+body.touch #crosshair { opacity: 0.5; }
+
+body.touch #touch-ui {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;            /* gestures pass through to canvas */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* floating joystick */
+.joy {
+  position: fixed;
+  width: 0; height: 0;
+  pointer-events: none;
+}
+.joy-base, .joy-knob {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.joy-base {
+  width: 140px; height: 140px;
+  background: rgba(255,255,255,0.08);
+  border: 2px solid rgba(255,255,255,0.25);
+}
+.joy-knob {
+  width: 64px; height: 64px;
+  background: rgba(230,36,41,0.55);
+  border: 2px solid rgba(255,255,255,0.6);
+  box-shadow: 0 0 18px rgba(230,36,41,0.5);
+}
+
+/* action buttons — each individually tappable */
+.touch-btn {
+  position: fixed;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--ink);
+  background: rgba(20, 24, 40, 0.5);
+  border: 2px solid rgba(255,255,255,0.25);
+  backdrop-filter: blur(4px);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+.touch-btn.active { transform: scale(0.92); filter: brightness(1.4); }
+
+/* right-hand action cluster */
+.btn-swing {
+  right: 28px; bottom: 40px;
+  width: 96px; height: 96px;
+  font-size: 16px;
+  background: rgba(230,36,41,0.45);
+  border-color: rgba(255,120,120,0.7);
+  box-shadow: 0 0 22px rgba(230,36,41,0.4);
+}
+.btn-jump   { right: 142px; bottom: 64px;  width: 72px; height: 72px; font-size: 13px; }
+.btn-sprint { right: 56px;  bottom: 150px; width: 64px; height: 64px; font-size: 12px;
+              background: rgba(29,79,156,0.45); border-color: rgba(120,160,255,0.7); }
+.btn-cling  { right: 150px; bottom: 156px; width: 64px; height: 64px; font-size: 11px; }
+
+/* small utility buttons, top-right (clear of the controls panel which is hidden) */
+.btn-cam     { top: 24px; right: 24px;  width: 52px; height: 52px; font-size: 12px; }
+.btn-respawn { top: 24px; right: 86px;  width: 52px; height: 52px; font-size: 20px; }
+

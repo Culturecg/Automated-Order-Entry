@@ -3,6 +3,7 @@ import { City } from './City.js';
 import { Player } from './Player.js';
 import { CameraController } from './CameraController.js';
 import { createInput } from './input.js';
+import { isTouchDevice, setupTouchControls } from './touch.js';
 
 // ---- bootstrap -------------------------------------------------------------
 
@@ -48,6 +49,9 @@ const cameraCtrl = new CameraController(camera, city);
 const player = new Player(scene, city, cameraCtrl);
 const input = createInput(canvas);
 
+const TOUCH = isTouchDevice();
+if (TOUCH) setupTouchControls(input);
+
 player.pos.set(0, 40, 0); // drop into the central plaza
 
 // keep the sun following the player so shadows stay crisp around them
@@ -68,7 +72,7 @@ const controlsPanel = document.getElementById('controls');
 
 startBtn.addEventListener('click', () => {
   startOverlay.classList.add('hidden');
-  canvas.requestPointerLock();
+  if (!TOUCH) canvas.requestPointerLock(); // iOS has no pointer lock
 });
 // fade controls hint once playing
 let played = false;

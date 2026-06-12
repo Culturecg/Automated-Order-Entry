@@ -98,8 +98,17 @@ export class Player {
     if (input.down('KeyS')) move.sub(fwd);
     if (input.down('KeyD')) move.add(right);
     if (input.down('KeyA')) move.sub(right);
+    let moveMag = move.lengthSq() > 0 ? 1 : 0; // analog 0..1 (keyboard = full)
+
+    // analog touch joystick overrides keyboard when active
+    const ax = input.moveAxis;
+    if (ax && (ax.x !== 0 || ax.y !== 0)) {
+      move.copy(fwd).multiplyScalar(ax.y).addScaledVector(right, ax.x);
+      moveMag = Math.min(1, Math.hypot(ax.x, ax.y));
+    }
     const hasInput = move.lengthSq() > 0;
     if (hasInput) move.normalize();
+    this._moveMag = moveMag;
 
     const sprint = input.down('ShiftLeft') || input.down('ShiftRight');
 
@@ -148,7 +157,7 @@ export class Player {
   // ---- per-state logic -----------------------------------------------------
 
   _updateGround(dt, move, hasInput, sprint, input) {
-    const maxSpeed = sprint ? MAX_SPRINT : MAX_RUN;
+    const maxSpeed = (sprint ? MAX_SPRINT : MAX_RUN) * (this._moveMag || 1);
     if (hasInput) {
       this.vel.x += move.x * MOVE_ACCEL * dt;
       this.vel.z += move.z * MOVE_ACCEL * dt;

@@ -25,9 +25,10 @@ export function createInput(canvas) {
     input.keys[e.code] = false;
   });
 
-  // --- pointer lock for mouse-look ---
+  // --- pointer lock for mouse-look (desktop only; iOS Safari has no pointer lock) ---
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   canvas.addEventListener('click', () => {
-    if (!input.locked) canvas.requestPointerLock();
+    if (!isTouch && !input.locked) canvas.requestPointerLock();
   });
   document.addEventListener('pointerlockchange', () => {
     input.locked = document.pointerLockElement === canvas;
