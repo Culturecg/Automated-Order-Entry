@@ -54,15 +54,9 @@ export function createSpiderMan() {
   const headPivot = new THREE.Group(); headPivot.position.y = 0.46; body.add(headPivot);
   const headGroup = new THREE.Group(); headGroup.position.y = 0.40; headPivot.add(headGroup);
   headGroup.scale.set(1.5, 1.02, 1.12);
+  // eyes are painted INTO the mask texture (front of the head) so they wrap
+  // perfectly onto the surface as proper Funko almond shapes.
   headGroup.add(m(new THREE.SphereGeometry(0.42, 26, 22), maskMat, [0, 0, 0]));
-
-  // eyes as concentric caps → they conform to the (scaled) head surface
-  for (const sx of [-1, 1]) {
-    const dir = new THREE.Vector3(sx * 0.5, -0.1, 1).normalize();
-    const rim = eyeCap(0.428, 0.5, black, dir, sx * 0.5, [1.35, 1, 0.85]);
-    const white = eyeCap(0.435, 0.38, eyeMat, dir, sx * 0.5, [1.4, 1, 0.8]);
-    headGroup.add(rim, white);
-  }
 
   // ---- arms (blue shoulder→elbow, red glove mitt) ----
   const armL = makeArm(-0.30, 0.36, blue, red);
@@ -248,16 +242,43 @@ export function createSpiderMan() {
   }
 }
 
-// Red mask texture with black web lines (longitude spokes converge at the head
-// top, latitude arcs ring it — reads as a Funko Spidey mask).
+// Red mask texture: black web lines + the two big white Funko eyes painted on
+// the front of the head (UV ≈ 0.25, 0.5). The eyes are pointed almonds (wide,
+// rounded outer-top lobe tapering to a sharp inner point) with thick black rims.
 function makeMaskTexture(redHex) {
   const S = 256;
   const c = document.createElement('canvas'); c.width = c.height = S;
   const ctx = c.getContext('2d');
   const r = (redHex >> 16) & 255, g = (redHex >> 8) & 255, b = redHex & 255;
   ctx.fillStyle = `rgb(${r},${g},${b})`; ctx.fillRect(0, 0, S, S);
-  ctx.strokeStyle = 'rgba(10,10,14,0.85)'; ctx.lineWidth = 2.0;
+
+  // web lines
+  ctx.strokeStyle = 'rgba(10,10,14,0.8)'; ctx.lineWidth = 1.8;
   for (let i = 0; i < 16; i++) { const x = (i / 16) * S; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, S); ctx.stroke(); }
   for (let j = 1; j < 10; j++) { const y = Math.pow(j / 10, 1.3) * S; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S, y); ctx.stroke(); }
+
+  // eyes — front of head is around canvas (64,128); head is stretched ~1.5x in
+  // X so eyes are kept narrow horizontally to come out the right proportion.
+  const fx = 64, fy = 122;
+  // right eye: inner point low-centre, wide lobe up-and-out
+  drawEye(ctx, fx + 6, fy + 16, fx + 22, fy - 14, 'black', 13);
+  drawEye(ctx, fx + 7.5, fy + 13, fx + 20, fy - 11, '#ffffff', 10);
+  // left eye (mirror)
+  drawEye(ctx, fx - 6, fy + 16, fx - 22, fy - 14, 'black', 13);
+  drawEye(ctx, fx - 7.5, fy + 13, fx - 20, fy - 11, '#ffffff', 10);
+
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+
+// Pointed-almond eye between an inner tip and an outer tip, bulging by `bulge`.
+function drawEye(ctx, ix, iy, ox, oy, color, bulge) {
+  const mx = (ix + ox) / 2, my = (iy + oy) / 2;
+  const dx = ox - ix, dy = oy - iy, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  ctx.beginPath();
+  ctx.moveTo(ix, iy);
+  ctx.quadraticCurveTo(mx + nx * bulge, my + ny * bulge, ox, oy);   // outer curve
+  ctx.quadraticCurveTo(mx - nx * bulge * 0.7, my - ny * bulge * 0.7, ix, iy); // inner curve
+  ctx.closePath();
+  ctx.fillStyle = color; ctx.fill();
 }

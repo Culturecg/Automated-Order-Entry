@@ -76,8 +76,8 @@ export class CameraController {
       this.pitch += (pitchTarget - this.pitch) * Math.min(1, dt * (follow.pitchRate ?? 0.8));
     }
 
-    // desired look target a bit above the feet/origin
-    const focus = targetPos.clone().add(new THREE.Vector3(0, 1.4, 0));
+    // look target around the chest/head of the (short Funko) body
+    const focus = targetPos.clone().add(new THREE.Vector3(0, 1.05, 0));
 
     // smooth distance toward preset
     this.distance += (this.distanceTarget - this.distance) * Math.min(1, dt * 8);

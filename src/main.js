@@ -90,7 +90,7 @@ const TOUCH = isTouchDevice();
 if (TOUCH) setupTouchControls(input);
 
 player.pos.set(0, 40, 0); // drop into the central plaza
-window.__game = { player, cameraCtrl, city, traffic }; // debug/automation handle
+window.__game = { player, cameraCtrl, city, traffic, input }; // debug/automation handle
 
 // keep the sun following the player so shadows stay crisp around them
 function repositionSun() {

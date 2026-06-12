@@ -79,12 +79,13 @@ export class City {
           mesh.receiveShadow = true;
           this.scene.add(mesh);
 
-          // simple parapet lip on the roof for silhouette
+          // low parapet trim whose TOP is flush with the roof floor (so Spidey
+          // stands ON the roof, not sunk inside a raised rim).
           const lip = new THREE.Mesh(
-            new THREE.BoxGeometry(w * 1.02, 1.2, d * 1.02),
+            new THREE.BoxGeometry(w * 1.03, 0.6, d * 1.03),
             new THREE.MeshStandardMaterial({ color: tint.clone().multiplyScalar(0.7), roughness: 0.8 })
           );
-          lip.position.set(cx + offset, h, cz + offset * 0.3);
+          lip.position.set(cx + offset, h - 0.3, cz + offset * 0.3);
           this.scene.add(lip);
 
           this.buildings.push({ box: new THREE.Box3().setFromObject(mesh), mesh, height: h });
@@ -112,18 +113,20 @@ export class City {
     }
 
     const SW = 4.0;                 // sidewalk width
-    const outer = this.blockSize / 2 + SW;
-    const longGeo = new THREE.BoxGeometry(this.blockSize + 2 * SW, 0.18, SW);
-    const sideGeo = new THREE.BoxGeometry(SW, 0.18, this.blockSize + 2 * SW);
-    // four curbs per block, instanced
+    // Thin, near-flush slabs (top at y≈0.05) so feet don't sink into a raised
+    // curb. Perimeter frame of four around each block.
+    const TH = 0.05;
+    const longGeo = new THREE.BoxGeometry(this.blockSize + 2 * SW, TH, SW);
+    const sideGeo = new THREE.BoxGeometry(SW, TH, this.blockSize + 2 * SW);
     const im = new THREE.InstancedMesh(longGeo, mat, frames.length * 2);
     const im2 = new THREE.InstancedMesh(sideGeo, mat, frames.length * 2);
     const m = new THREE.Matrix4();
+    const yy = TH / 2;
     frames.forEach(([cx, cz], i) => {
-      m.makeTranslation(cx, 0.09, cz - (this.blockSize / 2 + SW / 2)); im.setMatrixAt(i * 2, m);
-      m.makeTranslation(cx, 0.09, cz + (this.blockSize / 2 + SW / 2)); im.setMatrixAt(i * 2 + 1, m);
-      m.makeTranslation(cx - (this.blockSize / 2 + SW / 2), 0.09, cz); im2.setMatrixAt(i * 2, m);
-      m.makeTranslation(cx + (this.blockSize / 2 + SW / 2), 0.09, cz); im2.setMatrixAt(i * 2 + 1, m);
+      m.makeTranslation(cx, yy, cz - (this.blockSize / 2 + SW / 2)); im.setMatrixAt(i * 2, m);
+      m.makeTranslation(cx, yy, cz + (this.blockSize / 2 + SW / 2)); im.setMatrixAt(i * 2 + 1, m);
+      m.makeTranslation(cx - (this.blockSize / 2 + SW / 2), yy, cz); im2.setMatrixAt(i * 2, m);
+      m.makeTranslation(cx + (this.blockSize / 2 + SW / 2), yy, cz); im2.setMatrixAt(i * 2 + 1, m);
     });
     im.receiveShadow = im2.receiveShadow = true;
     this.scene.add(im, im2);

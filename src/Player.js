@@ -313,7 +313,7 @@ export class Player {
     const variant = chaining ? a.variant : (heavy ? 'B' : 'A');
     const durs = type === 'kick' ? [0.34, 0.40, 0.56] : [0.24, 0.28, 0.40];
     a.type = type; a.step = step; a.variant = variant; a.t = 0.0001; a.dur = durs[step];
-    this._comboWindow = a.dur + 0.32;
+    this._comboWindow = a.dur + 0.6; // generous window so a normal tap pace chains
 
     const f = new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
     // forward commitment scales up through the combo
