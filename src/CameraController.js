@@ -64,14 +64,16 @@ export class CameraController {
   // behind the player. A manual drag always wins instantly.
   update(dt, targetPos, follow = null) {
     this._manualTimer += dt;
-    if (follow && this._manualTimer > 1.0) {
+    const lock = follow ? (follow.lock ?? 1.0) : 1.0;
+    if (follow && this._manualTimer > lock) {
       const desired = follow.heading + Math.PI; // sit behind the player
       let d = desired - this.yaw;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
       this.yaw += d * Math.min(1, dt * follow.rate);
-      // ease pitch back to a comfortable trailing angle, very softly
-      this.pitch += (0.30 - this.pitch) * Math.min(1, dt * 0.8);
+      // ease pitch back to a comfortable trailing angle
+      const pitchTarget = follow.pitch ?? 0.30;
+      this.pitch += (pitchTarget - this.pitch) * Math.min(1, dt * (follow.pitchRate ?? 0.8));
     }
 
     // desired look target a bit above the feet/origin

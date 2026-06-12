@@ -64,6 +64,9 @@ export function setupTouchControls(input) {
   makeButton('JUMP', 'btn-jump', { hold: true, code: 'Space' });
   // sprint (hold) — wall-climbing is automatic: jump/run into a building
   makeButton('RUN', 'btn-sprint', { hold: true, code: 'ShiftLeft' });
+  // melee
+  makeButton('PUNCH', 'btn-punch', { hold: true, code: 'KeyJ' });
+  makeButton('KICK', 'btn-kick', { hold: true, code: 'KeyK' });
   // small utility buttons
   makeButton('CAM', 'btn-cam', { hold: true, code: 'KeyC' });
   makeButton('⟳', 'btn-respawn', { hold: true, code: 'KeyR' });

@@ -71,8 +71,9 @@ export class City {
 
           const mat = new THREE.MeshStandardMaterial({
             color: this._randBuildingColor(rng),
-            roughness: 0.6,
-            metalness: 0.15,
+            roughness: 0.45 + rng() * 0.3,  // glassy → concrete spread
+            metalness: 0.2,
+            envMapIntensity: 0.9,
             map: windowTex,
           });
           // tile the window texture proportional to height

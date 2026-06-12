@@ -125,6 +125,12 @@ export class Player {
     this.wallNormal = null;
     this._wallLost = 0;       // seconds without wall contact while climbing
     this.strands = [];        // released WebStrand instances
+    this._onGround = false;
+    this._landTimer = 0;      // brief crouch-landing pose
+    this._attack = { type: null, t: 0, dur: 0 };
+    this._punchPrev = false;
+    this._kickPrev = false;
+    this._tmp = new THREE.Vector3();
 
     this.model = createSpiderMan();
     scene.add(this.model.root);
@@ -166,7 +172,7 @@ export class Player {
   releaseWeb() {
     if (this.anchor) {
       // the strand stays behind, hanging from the anchor
-      const hand = this.pos.clone().add(new THREE.Vector3(0, 1.5, 0));
+      const hand = this.model.getWristWorld('R', this._tmp).clone();
       this.strands.push(new WebStrand(this.scene, this.anchor, hand, this.vel));
       if (this.strands.length > 6) this.strands.shift().dispose();
     }
@@ -208,6 +214,19 @@ export class Player {
 
     const sprint = input.down('ShiftLeft') || input.down('ShiftRight');
 
+    // ---- combat (edge-triggered, allowed on ground or in the air) ----
+    if (this._attack.t > 0) {
+      this._attack.t += dt;
+      if (this._attack.t >= this._attack.dur) this._attack = { type: null, t: 0, dur: 0 };
+    }
+    const canAttack = (this.state === 'ground' || this.state === 'air') && !this._attack.type;
+    const punchNow = input.down('KeyJ');
+    const kickNow = input.down('KeyK');
+    if (canAttack && punchNow && !this._punchPrev) this._startAttack('punch');
+    else if (canAttack && kickNow && !this._kickPrev) this._startAttack('kick');
+    this._punchPrev = punchNow;
+    this._kickPrev = kickNow;
+
     // ---- web input (edge-triggered toggle: tap to attach, tap to release) ----
     if (input.webPressed) {
       if (this.state === 'swing') this.releaseWeb();
@@ -223,23 +242,24 @@ export class Player {
       case 'wall':   this._updateWall(dt, upIntent, latIntent, move, input); break;
     }
 
-    // ---- integrate + collide ----
+    // ---- integrate + collide (sets this._onGround, incl. on rooftops) ----
+    const fallSpeed = -this.vel.y;
     this.pos.addScaledVector(this.vel, dt);
     this._collide(dt);
 
-    // ---- ground contact check ----
-    if (this.pos.y <= RADIUS + 0.001) {
-      this.pos.y = RADIUS;
-      if (this.vel.y < 0) this.vel.y = 0;
+    // ---- ground contact: works at street level AND on building tops ----
+    if (this._onGround) {
       if (this.state === 'air' || this.state === 'swing') {
         this.releaseWeb();
         this.state = 'ground';
+        if (fallSpeed > 16) this._landTimer = 0.32; // hard landing → crouch
       } else if (this.state === 'wall' && upIntent <= 0) {
-        this.state = 'ground'; // climbed down to the street
+        this.state = 'ground';
       }
     } else if (this.state === 'ground') {
-      this.state = 'air'; // walked off a ledge
+      this.state = 'air'; // walked off a ledge / rooftop edge
     }
+    if (this._landTimer > 0) this._landTimer -= dt;
 
     this._updateModel(dt, hasInput, sprint);
     this._updateWebs(dt);
@@ -251,23 +271,34 @@ export class Player {
 
   // ---- per-state logic -----------------------------------------------------
 
+  _startAttack(type) {
+    this._attack = { type, t: 0.0001, dur: type === 'kick' ? 0.42 : 0.32 };
+    // little forward commitment so attacks feel weighty
+    const f = new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
+    if (this.state === 'ground') this.vel.addScaledVector(f, type === 'kick' ? 4 : 2.5);
+  }
+
   _updateGround(dt, move, hasInput, sprint, input) {
+    // attacking roots you briefly (no steering mid-strike)
+    const attacking = !!this._attack.type;
     const maxSpeed = (sprint ? MAX_SPRINT : MAX_RUN) * (this._moveMag || 1);
-    if (hasInput) {
+    if (hasInput && !attacking) {
       this.vel.x += move.x * MOVE_ACCEL * dt;
       this.vel.z += move.z * MOVE_ACCEL * dt;
       this.facing = Math.atan2(move.x, move.z);
     } else {
       // friction
-      this.vel.x *= Math.pow(0.0008, dt);
-      this.vel.z *= Math.pow(0.0008, dt);
+      this.vel.x *= Math.pow(attacking ? 0.02 : 0.0008, dt);
+      this.vel.z *= Math.pow(attacking ? 0.02 : 0.0008, dt);
     }
     // clamp horizontal speed
     const h = Math.hypot(this.vel.x, this.vel.z);
     if (h > maxSpeed) { const s = maxSpeed / h; this.vel.x *= s; this.vel.z *= s; }
 
-    this.vel.y = 0;
-    if (input.down('Space')) {
+    // gentle downward press keeps him planted on rooftops & slopes so the
+    // collision reports ground contact every frame (otherwise he'd "fall off").
+    this.vel.y = -3;
+    if (input.down('Space') && !attacking) {
       this.vel.y = JUMP_VELOCITY;
       this.state = 'air';
     }
@@ -376,16 +407,20 @@ export class Player {
   }
 
   _collide(dt) {
+    this._onGround = false;
     const r = this.city.collideSphere(this.pos, RADIUS);
     this.pos.copy(r.pos);
 
-    if (r.hitTop) {
-      // landed on a rooftop
+    // street floor
+    if (this.pos.y <= RADIUS) {
+      this.pos.y = RADIUS;
       if (this.vel.y < 0) this.vel.y = 0;
-      if (this.state === 'air' || this.state === 'swing') {
-        this.releaseWeb();
-        this.state = 'ground';
-      }
+      this._onGround = true;
+    }
+    // building rooftop
+    if (r.hitTop) {
+      if (this.vel.y < 0) this.vel.y = 0;
+      this._onGround = true;
     }
 
     if (r.onWall && Math.abs(r.wallNormal.y) < 0.4) {
@@ -441,19 +476,23 @@ export class Player {
     let pose = 'idle';
     const h = Math.hypot(this.vel.x, this.vel.z);
     if (this.state === 'swing') pose = 'swing';
-    else if (this.state === 'wall') pose = 'crawl';
+    else if (this.state === 'wall') pose = 'climb';
     else if (this.state === 'air') pose = 'air';
+    else if (this._landTimer > 0) pose = 'land';
     else if (h > 0.6) pose = 'run';
 
+    const attack = this._attack.type
+      ? { type: this._attack.type, t01: this._attack.t / this._attack.dur }
+      : null;
     const speed01 = Math.min(1, h / MAX_SPRINT);
-    this.model.update(dt, pose, speed01);
+    this.model.update(dt, pose, speed01, { attack });
   }
 
   _updateWebs(dt) {
-    // active taut cord
+    // active taut cord — fires from the wrist, hand grips the line
     if (this.anchor) {
-      const hand = this.pos.clone().add(new THREE.Vector3(0, 1.5, 0));
-      orientSegment(this.webMesh, hand, this.anchor);
+      const wrist = this.model.getWristWorld('R', this._tmp).clone();
+      orientSegment(this.webMesh, wrist, this.anchor);
     }
     // released strands
     for (let i = this.strands.length - 1; i >= 0; i--) {

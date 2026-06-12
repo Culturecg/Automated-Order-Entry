@@ -16,10 +16,42 @@ renderer.setPixelRatio(LOWFX ? 1 : Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = !LOWFX;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// filmic tone mapping + sRGB output for a grounded, photographic look
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9fb4d4);          // hazy NYC daylight
-scene.fog = new THREE.Fog(0x9fb4d4, 220, 700);
+
+// Gradient sky used both as the backdrop AND as image-based lighting, so every
+// surface picks up soft sky/ground bounce — the biggest realism win available
+// without external HDRIs.
+const sky = makeSkyEnv(renderer);
+scene.background = sky.raw;        // equirect gradient renders as the sky dome
+scene.environment = sky.texture;   // prefiltered map drives reflections/ambient
+scene.fog = new THREE.Fog(0xb9c6d8, 260, 760);
+
+function makeSkyEnv(renderer) {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.0, '#3f6fb5');   // zenith
+  g.addColorStop(0.45, '#88a6cc');
+  g.addColorStop(0.62, '#cdd6e0');  // hazy horizon
+  g.addColorStop(0.65, '#c9cdd2');
+  g.addColorStop(1.0, '#6b6f78');   // ground bounce
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 16, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  // prefilter into a proper environment map for clean reflections
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromEquirectangular(tex);
+  pmrem.dispose();
+  return { texture: envRT.texture, raw: tex };
+}
 
 const camera = new THREE.PerspectiveCamera(
   68, window.innerWidth / window.innerHeight, 0.1, 2000
@@ -28,10 +60,10 @@ camera.position.set(0, 20, 20);
 
 // ---- lighting --------------------------------------------------------------
 
-const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x55555f, 1.1);
+const hemi = new THREE.HemisphereLight(0xdfeaff, 0x6a6f7a, 1.3);
 scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(0xfff2e0, 1.5);
+const sun = new THREE.DirectionalLight(0xfff4e2, 2.4);
 sun.position.set(120, 260, 80);
 sun.castShadow = !LOWFX;
 sun.shadow.mapSize.set(2048, 2048);
@@ -56,6 +88,7 @@ const TOUCH = isTouchDevice();
 if (TOUCH) setupTouchControls(input);
 
 player.pos.set(0, 40, 0); // drop into the central plaza
+window.__game = { player, cameraCtrl, city }; // debug/automation handle
 
 // keep the sun following the player so shadows stay crisp around them
 function repositionSun() {
@@ -113,11 +146,16 @@ function frame() {
 
   player.update(dt, input);
 
-  // auto-recenter the camera behind Spidey while he's moving on foot
+  // auto-recenter the camera behind Spidey
   const hSpeed = Math.hypot(player.vel.x, player.vel.z);
-  const follow = (player.state === 'ground' && hSpeed > 2)
-    ? { heading: player.facing, rate: 1.0 + Math.min(1, hSpeed / 20) * 1.6 }
-    : null;
+  let follow = null;
+  if (player.state === 'swing') {
+    // snap quickly to right behind him, looking the way he's flying
+    const heading = hSpeed > 1 ? Math.atan2(player.vel.x, player.vel.z) : player.facing;
+    follow = { heading, rate: 6, lock: 0.25, pitch: 0.18, pitchRate: 2.5 };
+  } else if (player.state === 'ground' && hSpeed > 2) {
+    follow = { heading: player.facing, rate: 1.0 + Math.min(1, hSpeed / 20) * 1.6 };
+  }
   cameraCtrl.update(dt, player.pos, follow);
   repositionSun();
 
