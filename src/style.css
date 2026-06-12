@@ -1,0 +1,151 @@
+:root {
+  --accent: #e62429;   /* Spidey red */
+  --accent2: #1d4e9c;  /* Spidey blue */
+  --ink: #f4f4f8;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a12;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  cursor: default;
+}
+
+#game {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#speedometer, #state-readout {
+  position: fixed;
+  left: 24px;
+  padding: 10px 16px;
+  background: rgba(10, 10, 25, 0.55);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  backdrop-filter: blur(6px);
+  font-variant-numeric: tabular-nums;
+}
+
+#speedometer { bottom: 84px; }
+#state-readout { bottom: 24px; border-left-color: var(--accent2); }
+
+.label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0.6;
+}
+
+#speed-value { font-size: 34px; font-weight: 700; line-height: 1; }
+.unit { font-size: 13px; opacity: 0.7; margin-left: 4px; }
+#state-value { font-size: 20px; font-weight: 600; letter-spacing: 1px; }
+
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0,0,0,0.6);
+}
+
+/* ---------- Controls panel ---------- */
+#controls {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 11;
+  width: 320px;
+  padding: 18px 20px;
+  background: rgba(10, 10, 25, 0.6);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  font-size: 13px;
+  line-height: 1.9;
+  transition: opacity 0.4s;
+}
+
+#controls h2 {
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+#controls ul { list-style: none; }
+#controls li { opacity: 0.85; }
+#controls .hint { margin-top: 10px; opacity: 0.6; font-style: italic; }
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 6px;
+  margin-right: 2px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+/* ---------- Start overlay ---------- */
+#start-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(30,20,40,0.85), rgba(5,5,12,0.97));
+  transition: opacity 0.5s;
+}
+
+#start-overlay.hidden { opacity: 0; pointer-events: none; }
+
+.start-card { text-align: center; }
+.start-card h1 {
+  font-size: 72px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  background: linear-gradient(120deg, var(--accent), #ff6a6f, var(--accent2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 40px rgba(230,36,41,0.3);
+}
+.start-card p { margin: 10px 0 28px; opacity: 0.7; letter-spacing: 2px; }
+
+#start-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 14px 34px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--ink);
+  background: var(--accent);
+  border: none;
+  border-radius: 40px;
+  box-shadow: 0 8px 30px rgba(230,36,41,0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#start-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(230,36,41,0.6); }

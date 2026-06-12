@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spider-Man NYC — 3rd Person Prototype</title>
+  <link rel="stylesheet" href="./src/style.css" />
+  <!-- Import map so we can use clean `three` imports straight from a CDN, no build step. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="speedometer">
+      <span class="label">SPEED</span>
+      <span id="speed-value">0</span>
+      <span class="unit">mph</span>
+    </div>
+    <div id="state-readout">
+      <span class="label">STATE</span>
+      <span id="state-value">GROUNDED</span>
+    </div>
+    <div id="crosshair"></div>
+  </div>
+
+  <!-- Controls help -->
+  <div id="controls">
+    <h2>SPIDER-MAN · NYC PROTOTYPE</h2>
+    <ul>
+      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move (relative to camera)</li>
+      <li><kbd>Mouse</kbd> Look around (3rd person orbit)</li>
+      <li><kbd>Shift</kbd> Sprint</li>
+      <li><kbd>Space</kbd> Jump</li>
+      <li><kbd>Left&nbsp;Click</kbd> / <kbd>E</kbd> Shoot web &amp; swing</li>
+      <li><kbd>Right&nbsp;Click</kbd> Release web</li>
+      <li><kbd>F</kbd> Cling to / climb walls</li>
+      <li><kbd>C</kbd> Toggle camera distance</li>
+      <li><kbd>R</kbd> Respawn at center</li>
+    </ul>
+    <p class="hint">Click the screen to start.</p>
+  </div>
+
+  <div id="start-overlay">
+    <div class="start-card">
+      <h1>SPIDER-MAN</h1>
+      <p>New York City · Third-Person Prototype</p>
+      <button id="start-btn">CLICK TO SWING IN</button>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
