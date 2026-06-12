@@ -112,7 +112,13 @@ function frame() {
   frame._rPrev = input.down('KeyR');
 
   player.update(dt, input);
-  cameraCtrl.update(dt, player.pos);
+
+  // auto-recenter the camera behind Spidey while he's moving on foot
+  const hSpeed = Math.hypot(player.vel.x, player.vel.z);
+  const follow = (player.state === 'ground' && hSpeed > 2)
+    ? { heading: player.facing, rate: 1.0 + Math.min(1, hSpeed / 20) * 1.6 }
+    : null;
+  cameraCtrl.update(dt, player.pos, follow);
   repositionSun();
 
   // HUD

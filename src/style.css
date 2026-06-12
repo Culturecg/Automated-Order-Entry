@@ -220,9 +220,8 @@ body.touch #touch-ui {
   box-shadow: 0 0 22px rgba(230,36,41,0.4);
 }
 .btn-jump   { right: 142px; bottom: 64px;  width: 72px; height: 72px; font-size: 13px; }
-.btn-sprint { right: 56px;  bottom: 150px; width: 64px; height: 64px; font-size: 12px;
+.btn-sprint { right: 64px;  bottom: 152px; width: 64px; height: 64px; font-size: 12px;
               background: rgba(29,79,156,0.45); border-color: rgba(120,160,255,0.7); }
-.btn-cling  { right: 150px; bottom: 156px; width: 64px; height: 64px; font-size: 11px; }
 
 /* small utility buttons, top-right (clear of the controls panel which is hidden) */
 .btn-cam     { top: 24px; right: 24px;  width: 52px; height: 52px; font-size: 12px; }

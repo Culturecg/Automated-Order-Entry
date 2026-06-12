@@ -23,6 +23,7 @@ export class CameraController {
     this._currentPos = new THREE.Vector3();
     this._lookAt = new THREE.Vector3();
     this._initialised = false;
+    this._manualTimer = 99; // seconds since the player last steered the camera
   }
 
   cyclePreset() {
@@ -32,6 +33,7 @@ export class CameraController {
 
   // Apply accumulated mouse movement.
   handleMouse(dx, dy) {
+    if (Math.abs(dx) + Math.abs(dy) > 1.5) this._manualTimer = 0; // user is steering
     this.yaw -= dx * this.sensitivity;
     this.pitch += dy * this.sensitivity;
     this.pitch = Math.max(this.minPitch, Math.min(this.maxPitch, this.pitch));
@@ -42,8 +44,10 @@ export class CameraController {
     return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize().negate();
   }
   getRight() {
+    // NB: no negate — cross(forward, up) IS screen-right (negating it was the
+    // cause of inverted left/right strafing).
     const f = this.getForward();
-    return new THREE.Vector3().crossVectors(f, new THREE.Vector3(0, 1, 0)).normalize().negate();
+    return new THREE.Vector3().crossVectors(f, new THREE.Vector3(0, 1, 0)).normalize();
   }
   // Full look direction including pitch — used for web auto-aim.
   getLookDir() {
@@ -55,7 +59,21 @@ export class CameraController {
     ).normalize().negate();
   }
 
-  update(dt, targetPos) {
+  // follow = { heading, rate } | null — when set (player is moving) and the
+  // user hasn't touched the camera for a moment, the camera gently glides back
+  // behind the player. A manual drag always wins instantly.
+  update(dt, targetPos, follow = null) {
+    this._manualTimer += dt;
+    if (follow && this._manualTimer > 1.0) {
+      const desired = follow.heading + Math.PI; // sit behind the player
+      let d = desired - this.yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      this.yaw += d * Math.min(1, dt * follow.rate);
+      // ease pitch back to a comfortable trailing angle, very softly
+      this.pitch += (0.30 - this.pitch) * Math.min(1, dt * 0.8);
+    }
+
     // desired look target a bit above the feet/origin
     const focus = targetPos.clone().add(new THREE.Vector3(0, 1.4, 0));
 

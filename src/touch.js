@@ -62,10 +62,8 @@ export function setupTouchControls(input) {
   makeButton('WEB', 'btn-swing', { onPress: () => { input.webPressed = true; } });
   // jump (hold-ish; Player reads Space as level-triggered)
   makeButton('JUMP', 'btn-jump', { hold: true, code: 'Space' });
-  // sprint (hold)
+  // sprint (hold) — wall-climbing is automatic: jump/run into a building
   makeButton('RUN', 'btn-sprint', { hold: true, code: 'ShiftLeft' });
-  // wall cling/climb (hold F)
-  makeButton('CLING', 'btn-cling', { hold: true, code: 'KeyF' });
   // small utility buttons
   makeButton('CAM', 'btn-cam', { hold: true, code: 'KeyC' });
   makeButton('⟳', 'btn-respawn', { hold: true, code: 'KeyR' });
