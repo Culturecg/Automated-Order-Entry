@@ -4,6 +4,7 @@ import { Player } from './Player.js';
 import { CameraController } from './CameraController.js';
 import { createInput } from './input.js';
 import { isTouchDevice, setupTouchControls } from './touch.js';
+import { Traffic } from './Traffic.js';
 
 // ---- bootstrap -------------------------------------------------------------
 
@@ -82,13 +83,14 @@ scene.add(sun);
 const city = new City(scene);
 const cameraCtrl = new CameraController(camera, city);
 const player = new Player(scene, city, cameraCtrl);
+const traffic = new Traffic(scene, city, LOWFX ? 16 : 28);
 const input = createInput(canvas);
 
 const TOUCH = isTouchDevice();
 if (TOUCH) setupTouchControls(input);
 
 player.pos.set(0, 40, 0); // drop into the central plaza
-window.__game = { player, cameraCtrl, city }; // debug/automation handle
+window.__game = { player, cameraCtrl, city, traffic }; // debug/automation handle
 
 // keep the sun following the player so shadows stay crisp around them
 function repositionSun() {
@@ -145,6 +147,7 @@ function frame() {
   frame._rPrev = input.down('KeyR');
 
   player.update(dt, input);
+  traffic.update(dt, player);
 
   // auto-recenter the camera behind Spidey
   const hSpeed = Math.hypot(player.vel.x, player.vel.z);

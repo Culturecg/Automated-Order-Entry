@@ -64,9 +64,9 @@ export function setupTouchControls(input) {
   makeButton('JUMP', 'btn-jump', { hold: true, code: 'Space' });
   // sprint (hold) — wall-climbing is automatic: jump/run into a building
   makeButton('RUN', 'btn-sprint', { hold: true, code: 'ShiftLeft' });
-  // melee
-  makeButton('PUNCH', 'btn-punch', { hold: true, code: 'KeyJ' });
-  makeButton('KICK', 'btn-kick', { hold: true, code: 'KeyK' });
+  // melee — each tap is one combo hit (tap fast to chain the 3-hit string)
+  makeButton('PUNCH', 'btn-punch', { onPress: () => { input.punchPressed = true; } });
+  makeButton('KICK', 'btn-kick', { onPress: () => { input.kickPressed = true; } });
   // small utility buttons
   makeButton('CAM', 'btn-cam', { hold: true, code: 'KeyC' });
   makeButton('⟳', 'btn-respawn', { hold: true, code: 'KeyR' });

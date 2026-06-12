@@ -7,15 +7,21 @@ export function createInput(canvas) {
     // mouse-look deltas accumulated since last consume()
     mouseDX: 0,
     mouseDY: 0,
-    // edge-triggered buttons (true for exactly one frame)
+    // edge-triggered buttons (latched until the next endFrame)
     webPressed: false,
     webReleased: false,
+    punchPressed: false,
+    kickPressed: false,
     locked: false,
   };
 
   // --- keyboard ---
   window.addEventListener('keydown', (e) => {
     input.keys[e.code] = true;
+    if (!e.repeat) {
+      if (e.code === 'KeyJ') input.punchPressed = true;
+      if (e.code === 'KeyK') input.kickPressed = true;
+    }
     // prevent the page from scrolling when using space / arrows
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
       e.preventDefault();
@@ -63,6 +69,8 @@ export function createInput(canvas) {
   input.endFrame = () => {
     input.webPressed = false;
     input.webReleased = false;
+    input.punchPressed = false;
+    input.kickPressed = false;
   };
 
   // Resolve "E" keyboard into the same edge-triggered web press.

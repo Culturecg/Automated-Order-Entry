@@ -127,7 +127,12 @@ export class Player {
     this.strands = [];        // released WebStrand instances
     this._onGround = false;
     this._landTimer = 0;      // brief crouch-landing pose
-    this._attack = { type: null, t: 0, dur: 0 };
+    this._justLandedTimer = 0; // for traffic "no time to react" knockback
+    this._perchTimer = 0;     // time stood still on a rooftop
+    // combo melee: tap repeatedly to chain a 3-hit string
+    this._atk = { type: null, step: 0, variant: 'A', t: 0, dur: 0 };
+    this._comboWindow = 0;    // time left to continue the current string
+    this._spinYaw = 0;        // extra body spin for the 360 kick
     this._punchPrev = false;
     this._kickPrev = false;
     this._tmp = new THREE.Vector3();
@@ -155,8 +160,20 @@ export class Player {
 
   shootWeb() {
     const origin = this.pos.clone().add(new THREE.Vector3(0, 1.4, 0));
-    const lookDir = this.cameraCtrl.getLookDir();
-    const hit = this.city.findSwingAnchor(origin, lookDir, WEB_RANGE);
+    // aim where you're LOOKING, biased toward the stick — toggle left while
+    // web-jumping and the next web reaches for an anchor on your left.
+    const aim = this.cameraCtrl.getLookDir();
+    if (this._move && this._move.lengthSq() > 0.01) {
+      const m = this._move.clone(); m.y = 0;
+      if (m.lengthSq() > 0.001) {
+        m.normalize();
+        aim.x = aim.x * 0.35 + m.x * 1.0;
+        aim.z = aim.z * 0.35 + m.z * 1.0;
+        aim.y = Math.max(aim.y, 0.3);   // keep arcs reaching upward
+        aim.normalize();
+      }
+    }
+    const hit = this.city.findSwingAnchor(origin, aim, WEB_RANGE);
     if (!hit) return false;
 
     this.anchor = hit.point.clone();
@@ -214,18 +231,17 @@ export class Player {
 
     const sprint = input.down('ShiftLeft') || input.down('ShiftRight');
 
-    // ---- combat (edge-triggered, allowed on ground or in the air) ----
-    if (this._attack.t > 0) {
-      this._attack.t += dt;
-      if (this._attack.t >= this._attack.dur) this._attack = { type: null, t: 0, dur: 0 };
-    }
-    const canAttack = (this.state === 'ground' || this.state === 'air') && !this._attack.type;
-    const punchNow = input.down('KeyJ');
-    const kickNow = input.down('KeyK');
-    if (canAttack && punchNow && !this._punchPrev) this._startAttack('punch');
-    else if (canAttack && kickNow && !this._kickPrev) this._startAttack('kick');
-    this._punchPrev = punchNow;
-    this._kickPrev = kickNow;
+    // ---- combat: rapid taps chain a 3-hit combo (jab-cross-uppercut /
+    //      low-high-360). Hold RUN while striking for the alternate string. ----
+    const a = this._atk;
+    if (a.t > 0) a.t += dt;
+    if (this._comboWindow > 0) this._comboWindow -= dt;
+    if (a.type && a.t >= a.dur && this._comboWindow <= 0) a.type = null; // string ended
+    if (this._spinYaw > 0) this._spinYaw = Math.max(0, this._spinYaw - dt * (Math.PI * 2 / 0.55));
+
+    const canAttack = this.state === 'ground' || this.state === 'air';
+    if (canAttack && input.punchPressed) this._strike('punch', sprint);
+    if (canAttack && input.kickPressed) this._strike('kick', sprint);
 
     // ---- web input (edge-triggered toggle: tap to attach, tap to release) ----
     if (input.webPressed) {
@@ -252,7 +268,8 @@ export class Player {
       if (this.state === 'air' || this.state === 'swing') {
         this.releaseWeb();
         this.state = 'ground';
-        if (fallSpeed > 16) this._landTimer = 0.32; // hard landing → crouch
+        this._justLandedTimer = 0.35;                 // brief "just arrived" flag
+        if (fallSpeed > 16) this._landTimer = 0.32;   // hard landing → crouch
       } else if (this.state === 'wall' && upIntent <= 0) {
         this.state = 'ground';
       }
@@ -260,6 +277,15 @@ export class Player {
       this.state = 'air'; // walked off a ledge / rooftop edge
     }
     if (this._landTimer > 0) this._landTimer -= dt;
+    if (this._justLandedTimer > 0) this._justLandedTimer -= dt;
+
+    // rooftop perch timer: standing still on a building top → signature crouch
+    const still = Math.hypot(this.vel.x, this.vel.z) < 0.6;
+    if (this.state === 'ground' && this.pos.y > 2.5 && still && !this._atk.type) {
+      this._perchTimer += dt;
+    } else {
+      this._perchTimer = 0;
+    }
 
     this._updateModel(dt, hasInput, sprint);
     this._updateWebs(dt);
@@ -271,16 +297,44 @@ export class Player {
 
   // ---- per-state logic -----------------------------------------------------
 
-  _startAttack(type) {
-    this._attack = { type, t: 0.0001, dur: type === 'kick' ? 0.42 : 0.32 };
-    // little forward commitment so attacks feel weighty
+  // Knockback from a car clip etc. Launch him along dir (already includes lift).
+  knockback(velVec) {
+    this.releaseWeb();
+    this.vel.copy(velVec);
+    this.state = 'air';
+    this._atk.type = null;
+  }
+
+  _strike(type, heavy) {
+    const a = this._atk;
+    // continue the string if we're mid-combo of the same type, else start fresh
+    const chaining = a.type === type && this._comboWindow > 0 && a.step < 2;
+    const step = chaining ? a.step + 1 : 0;
+    const variant = chaining ? a.variant : (heavy ? 'B' : 'A');
+    const durs = type === 'kick' ? [0.34, 0.40, 0.56] : [0.24, 0.28, 0.40];
+    a.type = type; a.step = step; a.variant = variant; a.t = 0.0001; a.dur = durs[step];
+    this._comboWindow = a.dur + 0.32;
+
     const f = new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
-    if (this.state === 'ground') this.vel.addScaledVector(f, type === 'kick' ? 4 : 2.5);
+    // forward commitment scales up through the combo
+    const lunge = (type === 'kick' ? 3 : 2) + step * 1.5;
+    if (this.state === 'ground') this.vel.addScaledVector(f, lunge);
+
+    // finishers leap: uppercut hops, 360 kick & jumping knee jump + spin
+    if (step === 2) {
+      if (type === 'kick') {
+        if (this.state === 'ground') { this.vel.y = Math.max(this.vel.y, 11); this.state = 'air'; }
+        if (variant === 'A') this._spinYaw = Math.PI * 2; // full 360 spin
+        this.vel.addScaledVector(f, 4);
+      } else if (this.state === 'ground') {
+        this.vel.y = Math.max(this.vel.y, 7);
+      }
+    }
   }
 
   _updateGround(dt, move, hasInput, sprint, input) {
     // attacking roots you briefly (no steering mid-strike)
-    const attacking = !!this._attack.type;
+    const attacking = !!this._atk.type && this._atk.t < this._atk.dur;
     const maxSpeed = (sprint ? MAX_SPRINT : MAX_RUN) * (this._moveMag || 1);
     if (hasInput && !attacking) {
       this.vel.x += move.x * MOVE_ACCEL * dt;
@@ -462,27 +516,29 @@ export class Player {
       const fwd2 = new THREE.Vector3().crossVectors(side, ropeUp).normalize();
       const m = new THREE.Matrix4().makeBasis(side, ropeUp, fwd2);
       targetQuat.setFromRotationMatrix(m);
-    } else if (this.state === 'wall') {
-      targetQuat.setFromEuler(new THREE.Euler(0, this.facing, 0));
     } else {
-      targetQuat.setFromEuler(new THREE.Euler(0, this.facing, 0));
+      // upright, plus any 360-spin-kick body rotation
+      targetQuat.setFromEuler(new THREE.Euler(0, this.facing + this._spinYaw, 0));
     }
-    const rate = this.state === 'swing' ? 5 : 9;
+    // snap instantly during the spin so the 360 reads; otherwise smooth
+    const rate = this.state === 'swing' ? 5 : (this._spinYaw > 0 ? 30 : 9);
     this.model.root.quaternion.slerp(targetQuat, Math.min(1, dt * rate));
 
     this.model.root.position.copy(this.pos);
     this.model.root.position.y -= RADIUS; // feet to ground
 
+    const attacking = this._atk.type && this._atk.t < this._atk.dur;
     let pose = 'idle';
     const h = Math.hypot(this.vel.x, this.vel.z);
     if (this.state === 'swing') pose = 'swing';
     else if (this.state === 'wall') pose = 'climb';
     else if (this.state === 'air') pose = 'air';
     else if (this._landTimer > 0) pose = 'land';
+    else if (this._perchTimer > 1.0) pose = 'perch';
     else if (h > 0.6) pose = 'run';
 
-    const attack = this._attack.type
-      ? { type: this._attack.type, t01: this._attack.t / this._attack.dur }
+    const attack = attacking
+      ? { type: this._atk.type, step: this._atk.step, variant: this._atk.variant, t01: this._atk.t / this._atk.dur }
       : null;
     const speed01 = Math.min(1, h / MAX_SPRINT);
     this.model.update(dt, pose, speed01, { attack });
