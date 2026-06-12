@@ -21,7 +21,7 @@ renderer.shadowMap.enabled = !LOWFX;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // filmic tone mapping + sRGB output for a grounded, photographic look
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.35;
+renderer.toneMappingExposure = 1.55;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();

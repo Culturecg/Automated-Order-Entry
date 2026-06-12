@@ -13,9 +13,9 @@ import { FXAAShader } from '../vendor/jsm/shaders/FXAAShader.js';
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    contrast: { value: 1.10 },
-    saturation: { value: 1.16 },
-    vignette: { value: 0.78 },     // 1 = none, lower = stronger
+    contrast: { value: 1.05 },
+    saturation: { value: 1.12 },
+    vignette: { value: 0.92 },     // 1 = none, lower = stronger
     warmth: { value: 0.02 },
   },
   vertexShader: /* glsl */`
@@ -33,8 +33,8 @@ const GradeShader = {
       c = mix(vec3(l), c, saturation);
       c *= vec3(1.0 + warmth, 1.0, 1.0 - warmth);     // gentle warm grade
       vec2 q = vUv - 0.5;                             // vignette
-      float v = smoothstep(0.9, vignette, 1.0 - dot(q, q) * 1.9);
-      c *= mix(1.0, v, 0.6);
+      float v = smoothstep(0.95, vignette, 1.0 - dot(q, q) * 1.6);
+      c *= mix(1.0, v, 0.4);
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), src.a);
     }
   `,
