@@ -72,15 +72,22 @@ local IP (e.g. `192.168.x.x`), and open `http://192.168.x.x:8080` in iPhone Safa
 
 ```
 index.html            Entry point + HUD + import map
+vendor/
+  three.module.js     Vendored Three.js (no CDN / works offline)
 src/
-  style.css           HUD / overlay styling
+  style.css           HUD / overlay / touch-controls styling
   main.js             Bootstrap: renderer, scene, lights, game loop
-  City.js             Procedural Manhattan grid + collision & raycast helpers
+  City.js             Procedural Manhattan grid + street props (cars, hydrants,
+                      lamps, sidewalks, crosswalks) + collision & ray helpers
   Player.js           Character controller: movement / air / swing / wall states
-  SpiderModel.js      Spider-Man rig built from primitives + pose animation
+  SpiderModel.js      Articulated Spider-Man rig (elbow/knee/ankle joints)
   CameraController.js  GTA-style third-person orbit camera w/ collision
   input.js            Keyboard + pointer-lock mouse-look + edge-triggered buttons
+  touch.js            PUBG-style mobile controls (joystick / look / buttons)
 ```
+
+**Performance switch:** append `?fx=low` to the URL to disable shadows and cap
+resolution — useful on older phones.
 
 ## Architecture notes (for the next milestone)
 

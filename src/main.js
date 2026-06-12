@@ -7,11 +7,14 @@ import { isTouchDevice, setupTouchControls } from './touch.js';
 
 // ---- bootstrap -------------------------------------------------------------
 
+// `?fx=low` disables shadows & caps resolution — for older phones (or software GL).
+const LOWFX = new URLSearchParams(location.search).get('fx') === 'low';
+
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOWFX });
+renderer.setPixelRatio(LOWFX ? 1 : Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !LOWFX;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
@@ -25,12 +28,12 @@ camera.position.set(0, 20, 20);
 
 // ---- lighting --------------------------------------------------------------
 
-const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x40404a, 0.7);
+const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x55555f, 1.1);
 scene.add(hemi);
 
 const sun = new THREE.DirectionalLight(0xfff2e0, 1.5);
 sun.position.set(120, 260, 80);
-sun.castShadow = true;
+sun.castShadow = !LOWFX;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.near = 10;
 sun.shadow.camera.far = 800;

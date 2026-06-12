@@ -11,11 +11,13 @@ export class City {
     this.blockSize = opts.blockSize ?? 60;    // footprint of a block
     this.street = opts.street ?? 18;          // street width between blocks
     this.buildings = [];                      // { box: THREE.Box3, mesh }
+    this.carColliders = [];                   // Box3 per parked car
     this.half = (this.blocks * (this.blockSize + this.street)) / 2;
 
     this._buildGround();
     this._buildBuildings();
     this._scatterProps();
+    this._buildStreets();
   }
 
   _buildGround() {
@@ -108,14 +110,203 @@ export class City {
     }
   }
 
+  // ---- Street life: sidewalks, parked cars, hydrants, lamps, crosswalks ----
+  // Everything here uses InstancedMesh so hundreds of props cost only a handful
+  // of draw calls (important for iPhone).
+
+  _buildStreets() {
+    const rng = mulberry32(4242);
+    const pitch = this.blockSize + this.street;
+    const start = -this.half + this.blockSize / 2;
+    const inPlaza = (x, z) => Math.abs(x) < pitch && Math.abs(z) < pitch;
+
+    // ---------- sidewalks: a raised slab under each block ----------
+    {
+      const slabs = [];
+      for (let gx = 0; gx < this.blocks; gx++) {
+        for (let gz = 0; gz < this.blocks; gz++) {
+          slabs.push([start + gx * pitch, start + gz * pitch]);
+        }
+      }
+      const geo = new THREE.BoxGeometry(this.blockSize + 7, 0.22, this.blockSize + 7);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8a8d96, roughness: 0.95 });
+      const im = new THREE.InstancedMesh(geo, mat, slabs.length);
+      const m = new THREE.Matrix4();
+      slabs.forEach(([x, z], i) => {
+        m.makeTranslation(x, 0.11, z);
+        im.setMatrixAt(i, m);
+      });
+      im.receiveShadow = true;
+      this.scene.add(im);
+    }
+
+    // ---------- parked cars (lots of yellow cabs) ----------
+    const carTransforms = []; // { x, z, rotY, color }
+    const palette = [0xe8e8ea, 0x17171c, 0x9aa0ab, 0x8c1f28, 0x1e3a5c, 0x3c4047];
+    const TAXI = 0xf2b500;
+    const curb = this.street / 2 - 2.4; // distance from street center to parked lane
+    const along = (fixed, isVertical) => {
+      for (let p = -this.half + 8; p < this.half - 8; p += 8.5) {
+        // skip the stretch crossing another street
+        const cell = ((p + this.half) % pitch);
+        if (cell > this.blockSize) continue;
+        for (const side of [-1, 1]) {
+          if (rng() > 0.4) continue;
+          const x = isVertical ? fixed + side * curb : p;
+          const z = isVertical ? p : fixed + side * curb;
+          if (inPlaza(x, z)) continue;
+          const heading = isVertical ? (side < 0 ? 0 : Math.PI) : (side < 0 ? Math.PI / 2 : -Math.PI / 2);
+          carTransforms.push({
+            x, z,
+            rotY: heading + (rng() - 0.5) * 0.04,
+            color: rng() < 0.35 ? TAXI : palette[Math.floor(rng() * palette.length)],
+          });
+        }
+      }
+    };
+    for (let i = 0; i < this.blocks - 1; i++) {
+      const s = start + i * pitch + pitch / 2; // street centerline between blocks
+      along(s, true);   // vertical street (cars face ±z)
+      along(s, false);  // horizontal street
+    }
+
+    const n = carTransforms.length;
+    const bodyIM = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1.9, 0.55, 4.3),
+      new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.4 }),
+      n
+    );
+    const cabIM = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1.7, 0.5, 2.1),
+      new THREE.MeshStandardMaterial({ color: 0x20242c, roughness: 0.2, metalness: 0.6 }),
+      n
+    );
+    const wheelIM = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.33, 0.33, 0.26, 10),
+      new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 0.9 }),
+      n * 4
+    );
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const wheelRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2));
+    const sV = new THREE.Vector3(1, 1, 1);
+    carTransforms.forEach((c, i) => {
+      q.setFromEuler(new THREE.Euler(0, c.rotY, 0));
+      m4.compose(new THREE.Vector3(c.x, 0.62, c.z), q, sV);
+      bodyIM.setMatrixAt(i, m4);
+      bodyIM.setColorAt(i, new THREE.Color(c.color));
+      m4.compose(new THREE.Vector3(c.x, 1.12, c.z).add(new THREE.Vector3(0, 0, -0.35).applyQuaternion(q)), q, sV);
+      cabIM.setMatrixAt(i, m4);
+      // 4 wheels
+      const wq = q.clone().multiply(wheelRot);
+      [[-0.92, 1.35], [0.92, 1.35], [-0.92, -1.35], [0.92, -1.35]].forEach(([wx, wz], wi) => {
+        const off = new THREE.Vector3(wx, 0, wz).applyQuaternion(q);
+        m4.compose(new THREE.Vector3(c.x + off.x, 0.33, c.z + off.z), wq, sV);
+        wheelIM.setMatrixAt(i * 4 + wi, m4);
+      });
+      // collider (slightly generous AABB regardless of heading)
+      this.carColliders.push(new THREE.Box3(
+        new THREE.Vector3(c.x - 2.2, 0, c.z - 2.2),
+        new THREE.Vector3(c.x + 2.2, 1.45, c.z + 2.2)
+      ));
+    });
+    bodyIM.castShadow = cabIM.castShadow = true;
+    this.scene.add(bodyIM, cabIM, wheelIM);
+
+    // ---------- fire hydrants at block corners ----------
+    {
+      const spots = [];
+      for (let gx = 0; gx < this.blocks; gx++) {
+        for (let gz = 0; gz < this.blocks; gz++) {
+          const cx = start + gx * pitch, cz = start + gz * pitch;
+          if (inPlaza(cx, cz)) continue;
+          if (rng() > 0.5) continue; // not every corner
+          const o = this.blockSize / 2 + 2.2;
+          const corner = [[-o, -o], [o, -o], [-o, o], [o, o]][Math.floor(rng() * 4)];
+          spots.push([cx + corner[0], cz + corner[1]]);
+        }
+      }
+      const im = new THREE.InstancedMesh(
+        new THREE.CapsuleGeometry(0.20, 0.42, 4, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd02818, roughness: 0.55 }),
+        spots.length
+      );
+      spots.forEach(([x, z], i) => {
+        m4.makeTranslation(x, 0.55, z);
+        im.setMatrixAt(i, m4);
+      });
+      im.castShadow = true;
+      this.scene.add(im);
+    }
+
+    // ---------- street lamps along the curbs ----------
+    {
+      const spots = [];
+      for (let gx = 0; gx < this.blocks; gx++) {
+        for (let gz = 0; gz < this.blocks; gz++) {
+          const cx = start + gx * pitch, cz = start + gz * pitch;
+          if (inPlaza(cx, cz)) continue;
+          const o = this.blockSize / 2 + 2.8;
+          // two lamps per block on alternating sides
+          spots.push([cx - o, cz - this.blockSize * 0.25]);
+          spots.push([cx + o, cz + this.blockSize * 0.25]);
+        }
+      }
+      const poleIM = new THREE.InstancedMesh(
+        new THREE.CylinderGeometry(0.09, 0.12, 5.6, 6),
+        new THREE.MeshStandardMaterial({ color: 0x2e3138, roughness: 0.7, metalness: 0.5 }),
+        spots.length
+      );
+      const headIM = new THREE.InstancedMesh(
+        new THREE.SphereGeometry(0.25, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffd877, emissiveIntensity: 0.9 }),
+        spots.length
+      );
+      spots.forEach(([x, z], i) => {
+        m4.makeTranslation(x, 2.8, z);
+        poleIM.setMatrixAt(i, m4);
+        m4.makeTranslation(x, 5.7, z);
+        headIM.setMatrixAt(i, m4);
+      });
+      poleIM.castShadow = true;
+      this.scene.add(poleIM, headIM);
+    }
+
+    // ---------- crosswalk stripes at every intersection ----------
+    {
+      const tex = makeCrosswalkTexture();
+      const spots = [];
+      for (let i = 0; i < this.blocks - 1; i++) {
+        for (let j = 0; j < this.blocks - 1; j++) {
+          const x = start + i * pitch + pitch / 2;
+          const z = start + j * pitch + pitch / 2;
+          if (inPlaza(x, z)) continue;
+          spots.push([x, z]);
+        }
+      }
+      const geo = new THREE.PlaneGeometry(this.street + 4, this.street + 4);
+      const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.95 });
+      const im = new THREE.InstancedMesh(geo, mat, spots.length);
+      const flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+      spots.forEach(([x, z], i) => {
+        m4.compose(new THREE.Vector3(x, 0.03, z), flat, sV);
+        im.setMatrixAt(i, m4);
+      });
+      im.receiveShadow = true;
+      this.scene.add(im);
+    }
+  }
+
   // ---- Physics / query helpers --------------------------------------------
 
   // Resolve a sphere (player capsule approximation) against all building boxes.
   // Returns the corrected position and which axis the contact was on.
   collideSphere(pos, radius) {
     const result = { pos: pos.clone(), onWall: false, wallNormal: null, hitTop: false };
-    for (const b of this.buildings) {
-      const box = b.box;
+    for (let i = 0; i < this.buildings.length + this.carColliders.length; i++) {
+      const box = i < this.buildings.length
+        ? this.buildings[i].box
+        : this.carColliders[i - this.buildings.length];
       // quick reject
       if (pos.x + radius < box.min.x || pos.x - radius > box.max.x) continue;
       if (pos.z + radius < box.min.z || pos.z - radius > box.max.z) continue;
@@ -237,12 +428,14 @@ function makeWindowTexture() {
   const c = document.createElement('canvas');
   c.width = 64; c.height = 64;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#2b303d';
+  // NOTE: this texture MULTIPLIES the building color, so keep it bright —
+  // near-white facade, slightly darker window panes, occasional lit window.
+  ctx.fillStyle = '#e8eaf0';
   ctx.fillRect(0, 0, 64, 64);
   for (let y = 4; y < 64; y += 10) {
     for (let x = 4; x < 64; x += 10) {
       const lit = Math.random() > 0.6;
-      ctx.fillStyle = lit ? '#ffe9a8' : '#161a22';
+      ctx.fillStyle = lit ? '#fff3c4' : '#7d8699';
       ctx.fillRect(x, y, 6, 6);
     }
   }
@@ -250,4 +443,28 @@ function makeWindowTexture() {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.magFilter = THREE.NearestFilter;
   return tex;
+}
+
+// Zebra crosswalk stripes on all four approaches of an intersection,
+// transparent in the middle so the asphalt shows through.
+function makeCrosswalkTexture() {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, S, S);
+  ctx.fillStyle = 'rgba(235,235,240,0.85)';
+  const band = 18;             // depth of each crosswalk band from the edge
+  const stripe = 6, gap = 6;   // stripe rhythm
+  // top & bottom bands: vertical stripes
+  for (let x = 8; x < S - 8; x += stripe + gap) {
+    ctx.fillRect(x, 2, stripe, band);
+    ctx.fillRect(x, S - band - 2, stripe, band);
+  }
+  // left & right bands: horizontal stripes
+  for (let y = 8; y < S - 8; y += stripe + gap) {
+    ctx.fillRect(2, y, band, stripe);
+    ctx.fillRect(S - band - 2, y, band, stripe);
+  }
+  return new THREE.CanvasTexture(c);
 }

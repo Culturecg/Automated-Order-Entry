@@ -68,6 +68,8 @@ export class Player {
     this.anchor = hit.point.clone();
     this.ropeLength = this.pos.distanceTo(this.anchor) * 0.92; // slightly taut
     this.ropeLength = Math.max(6, this.ropeLength);
+    // webbing from the ground gives a launch hop so the swing can actually start
+    if (this.state === 'ground') this.vel.y = Math.max(this.vel.y, 11);
     this.state = 'swing';
     this.webLine.visible = true;
     this.anchorDot.visible = true;
