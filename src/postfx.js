@@ -41,20 +41,22 @@ const GradeShader = {
 };
 
 export function setupPostFX(renderer, scene, camera, quality = 'high') {
+  const high = quality === 'high';
   const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
   const target = new THREE.WebGLRenderTarget(dbs.x, dbs.y, {
-    type: THREE.HalfFloatType, samples: quality === 'high' ? 2 : 0,
+    type: THREE.HalfFloatType, samples: 0,
   });
   const composer = new EffectComposer(renderer, target);
   composer.setPixelRatio(renderer.getPixelRatio());
 
   composer.addPass(new RenderPass(scene, camera));
 
+  // subtler glow than before (the stark bloom was too much)
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(dbs.x, dbs.y),
-    quality === 'high' ? 0.62 : 0.5,   // strength
-    0.6,                               // radius
-    0.55                               // luminance threshold (only bright things glow)
+    high ? 0.32 : 0.24,   // strength
+    high ? 0.5 : 0.4,     // radius
+    0.72                  // threshold — only genuinely bright things glow
   );
   composer.addPass(bloom);
 

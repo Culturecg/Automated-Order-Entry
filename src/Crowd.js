@@ -19,7 +19,7 @@ const WEB_BREAK_HITS = 3;
 const GRAVITY = -38, GROUND_Y = 0.0;
 
 export class Crowd {
-  constructor(scene, city, player) {
+  constructor(scene, city, player, pedCount = PED_COUNT) {
     this.scene = scene; this.city = city; this.player = player;
     this.people = [];
     this.enemies = [];
@@ -29,7 +29,7 @@ export class Crowd {
     this.robberyCooldown = 4;
     this._tmp = new THREE.Vector3();
 
-    for (let i = 0; i < PED_COUNT; i++) this.people.push(this._spawnPed(true));
+    for (let i = 0; i < pedCount; i++) this.people.push(this._spawnPed(true));
   }
 
   _spawnPed(anywhere) {
@@ -148,7 +148,7 @@ export class Crowd {
 
   // Soft-lock: tell the player which thug to focus so attacks track them.
   _updateSoftLock() {
-    let best = null, bd = 7.5, prio = -1;
+    let best = null, bd = 10, prio = -1;
     for (const e of this.enemies) {
       if (e.state === 'down') continue;
       const d = e.pos.distanceTo(this.player.pos);
@@ -291,25 +291,24 @@ export class Crowd {
     if (!hit) return;
     player.strikeImpact = null;
     const fdir = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
-    let target = null, bestD = 3.4;
+    let target = null, bestD = 3.8;
     for (const e of this.enemies) {
       if (e.state === 'down') continue;
       const to = this._tmp.subVectors(e.pos, player.pos); to.y = 0;
       const d = to.length();
-      // strongly prefer whatever the soft-lock is on (forgiving range/cone)
+      // strongly prefer whatever the soft-lock is on (very forgiving)
       const isLock = player.lockTarget && e.pos === player.lockTarget;
-      const reach = isLock ? 4.2 : 3.4;
+      const reach = isLock ? 6.0 : 3.8;
       if (d > reach) continue;
-      if (!isLock && to.normalize().dot(fdir) < 0.0 && d > 1.4) continue; // roughly in front
+      if (!isLock && to.normalize().dot(fdir) < -0.2 && d > 1.6) continue; // roughly in front
       if (isLock) { target = e; break; }   // lock wins outright
       if (d < bestD) { target = e; bestD = d; }
     }
     if (!target) return;
 
     const bound = target.state === 'bound';
-    // unbound enemies can block & counter (a "good fight") — but less often,
-    // so your soft-locked combos actually connect
-    if (!bound && target.blockCd <= 0 && Math.random() < 0.2) {
+    // unbound enemies rarely block (so your soft-locked combos actually connect)
+    if (!bound && target.blockCd <= 0 && Math.random() < 0.12) {
       target.blockCd = 1.0;
       // counter: shove the player a touch
       const dir = new THREE.Vector3().subVectors(player.pos, target.pos).setY(0).normalize();

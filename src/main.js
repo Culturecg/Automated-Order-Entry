@@ -10,18 +10,24 @@ import { setupPostFX } from './postfx.js';
 
 // ---- bootstrap -------------------------------------------------------------
 
-// `?fx=low` disables shadows & caps resolution — for older phones (or software GL).
-const LOWFX = new URLSearchParams(location.search).get('fx') === 'low';
+// Quality tiers. Phones default to a much lighter 'mobile' tier so it stays
+// smooth; ?fx=high forces full, ?fx=low / ?fx=off strip effects further.
+const FXPARAM = new URLSearchParams(location.search).get('fx');
+const TOUCH0 = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const QUALITY = FXPARAM === 'high' ? 'high'
+  : FXPARAM === 'low' || FXPARAM === 'off' ? 'low'
+  : TOUCH0 ? 'mobile' : 'high';
+const LOWFX = QUALITY === 'low';
+const FXOFF = FXPARAM === 'off';
 
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOWFX });
-renderer.setPixelRatio(LOWFX ? 1 : Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(QUALITY === 'high' ? Math.min(window.devicePixelRatio, 2) : 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = !LOWFX;
+renderer.shadowMap.enabled = QUALITY === 'high';   // shadows are the heaviest cost
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-// filmic tone mapping + sRGB output for a grounded, photographic look
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.55;
+renderer.toneMappingExposure = 1.5;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
@@ -68,7 +74,7 @@ scene.add(hemi);
 
 const sun = new THREE.DirectionalLight(0xfff4e2, 2.4);
 sun.position.set(120, 260, 80);
-sun.castShadow = !LOWFX;
+sun.castShadow = QUALITY === 'high';
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.near = 10;
 sun.shadow.camera.far = 800;
@@ -82,11 +88,12 @@ scene.add(sun);
 
 // ---- world + actors --------------------------------------------------------
 
-const city = new City(scene);
+// lighter world on phones: smaller map, fewer cars & people = fewer draw calls
+const city = new City(scene, { blocks: QUALITY === 'high' ? 16 : 12 });
 const cameraCtrl = new CameraController(camera, city);
 const player = new Player(scene, city, cameraCtrl);
-const traffic = new Traffic(scene, city, LOWFX ? 16 : 28);
-const crowd = new Crowd(scene, city, player);
+const traffic = new Traffic(scene, city, QUALITY === 'high' ? 28 : 14);
+const crowd = new Crowd(scene, city, player, QUALITY === 'high' ? 34 : 18);
 player.crowd = crowd;            // enables web-bind + melee
 const input = createInput(canvas);
 
@@ -106,8 +113,7 @@ scene.add(sun.target);
 
 // ---- cinematic post-processing (bloom / grade / vignette / FXAA) ----------
 // On by default; ?fx=low (or ?fx=off) skips it so low-end phones stay smooth.
-const FXOFF = new URLSearchParams(location.search).get('fx') === 'off';
-const postfx = (LOWFX || FXOFF) ? null : setupPostFX(renderer, scene, camera, 'high');
+const postfx = (LOWFX || FXOFF) ? null : setupPostFX(renderer, scene, camera, QUALITY);
 
 // ---- HUD refs --------------------------------------------------------------
 

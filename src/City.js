@@ -227,7 +227,7 @@ export class City {
       new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: 0.6, metalness: 0.6 }), lamps.length);
     const headIM = new THREE.InstancedMesh(
       new THREE.SphereGeometry(0.24, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffd877, emissiveIntensity: 1.8 }), lamps.length);
+      new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffd877, emissiveIntensity: 1.1 }), lamps.length);
     lamps.forEach(([x, z], i) => {
       m4.makeTranslation(x, 2.8, z); poleIM.setMatrixAt(i, m4);
       m4.makeTranslation(x, 5.7, z); headIM.setMatrixAt(i, m4);

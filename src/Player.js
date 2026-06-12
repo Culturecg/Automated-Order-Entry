@@ -380,10 +380,20 @@ export class Player {
   }
 
   _strike(type, heavy) {
-    // snap to face the locked thug so the hit is aimed
+    // snap to face the locked thug AND lunge toward him so the hit connects
+    // (homing attack — closes the gap like Arkham/Spider-Man brawlers).
     if (this.lockTarget) {
       const dx = this.lockTarget.x - this.pos.x, dz = this.lockTarget.z - this.pos.z;
-      if (dx * dx + dz * dz > 0.04) this.facing = Math.atan2(dx, dz);
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.2) {
+        this.facing = Math.atan2(dx, dz);
+        if (this.state === 'ground' && dist > 1.4 && dist < 7) {
+          const s = Math.min(1, (dist - 1.0) / 3.5);
+          const sp = (12 + dist * 2) * s;
+          this.vel.x = (dx / dist) * sp;
+          this.vel.z = (dz / dist) * sp;
+        }
+      }
     }
     const a = this._atk;
     // continue the string if we're mid-combo of the same type, else start fresh
