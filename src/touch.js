@@ -69,6 +69,8 @@ export function setupTouchControls(input) {
   makeButton('KICK', 'btn-kick', { onPress: () => { input.kickPressed = true; } });
   // hold to block/guard
   makeButton('BLOCK', 'btn-block', { hold: true, code: 'KeyL' });
+  // dodge (i-frame burst)
+  makeButton('DODGE', 'btn-dodge', { onPress: () => { input.dodgePressed = true; } });
   // small utility buttons
   makeButton('CAM', 'btn-cam', { hold: true, code: 'KeyC' });
   makeButton('⟳', 'btn-respawn', { hold: true, code: 'KeyR' });

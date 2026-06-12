@@ -32,9 +32,11 @@ const GradeShader = {
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); // saturation
       c = mix(vec3(l), c, saturation);
       c *= vec3(1.0 + warmth, 1.0, 1.0 - warmth);     // gentle warm grade
-      vec2 q = vUv - 0.5;                             // vignette
-      float v = smoothstep(0.95, vignette, 1.0 - dot(q, q) * 1.6);
-      c *= mix(1.0, v, 0.4);
+      // vignette: bright at the centre, gentle falloff to the edges. (The old
+      // version was inverted and darkened the middle into a dark oval.)
+      float r = length(vUv - 0.5);
+      float vig = smoothstep(0.85, 0.35, r);          // 1 near centre → 0 far edge
+      c *= mix(1.0, vig, 0.28);
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), src.a);
     }
   `,

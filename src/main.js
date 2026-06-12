@@ -92,8 +92,9 @@ scene.add(sun);
 const city = new City(scene, { blocks: QUALITY === 'high' ? 16 : 12 });
 const cameraCtrl = new CameraController(camera, city);
 const player = new Player(scene, city, cameraCtrl);
-const traffic = new Traffic(scene, city, QUALITY === 'high' ? 28 : 14);
-const crowd = new Crowd(scene, city, player, QUALITY === 'high' ? 34 : 18);
+// ~3x denser now that people & cars are single-mesh (cheap) entities
+const traffic = new Traffic(scene, city, QUALITY === 'high' ? 80 : 42);
+const crowd = new Crowd(scene, city, player, QUALITY === 'high' ? 110 : 56);
 player.crowd = crowd;            // enables web-bind + melee
 const input = createInput(canvas);
 

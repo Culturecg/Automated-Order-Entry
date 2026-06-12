@@ -108,6 +108,18 @@ function orientSegment(mesh, a, b) {
   mesh.quaternion.setFromUnitVectors(UP, dir);
 }
 
+// soft radial-gradient alpha disc for the blob shadow
+function makeBlobTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, 'rgba(0,0,0,0.85)');
+  g.addColorStop(0.5, 'rgba(0,0,0,0.4)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
 export class Player {
   constructor(scene, city, camera) {
     this.scene = scene;
@@ -145,9 +157,25 @@ export class Player {
     this.lockTarget = null;       // THREE.Vector3 of the soft-locked enemy (set by Crowd)
     this._blocking = false;
     this._flip = 0;               // remaining flip spin (radians) for web-jump tricks
+    this._iframes = 0;            // invulnerability window (dodge)
+    this._dodgeCd = 0;            // dodge cooldown
+    this.blobShadow = null;       // soft gradient ground shadow (set up below)
 
     this.model = createSpiderMan();
     scene.add(this.model.root);
+
+    // soft radial-gradient blob shadow (grounds him with a gentle gradient
+    // instead of a hard oval; works on every quality tier)
+    this.blobShadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.2, 2.2),
+      new THREE.MeshBasicMaterial({
+        map: makeBlobTexture(), transparent: true, opacity: 0.45,
+        depthWrite: false, color: 0x000000,
+      })
+    );
+    this.blobShadow.rotation.x = -Math.PI / 2;
+    this.blobShadow.renderOrder = 1;
+    scene.add(this.blobShadow);
 
     // active web: a visible taut cord from hand to anchor
     this.webMesh = new THREE.Mesh(
@@ -276,6 +304,19 @@ export class Player {
       this.strikeImpact = { type: a.type, power: a.step };
     }
 
+    // ---- dodge: quick burst with i-frames (great for fighting smart) ----
+    if (this._iframes > 0) this._iframes -= dt;
+    if (this._dodgeCd > 0) this._dodgeCd -= dt;
+    if (!locked && input.dodgePressed && this._dodgeCd <= 0 && this.state === 'ground') {
+      const d = (this._move && this._move.lengthSq() > 0.01)
+        ? this._move.clone()
+        : new THREE.Vector3(-Math.sin(this.facing), 0, -Math.cos(this.facing)); // backstep
+      d.normalize();
+      this.vel.x = d.x * 26; this.vel.z = d.z * 26; this.vel.y = 4;
+      this.state = 'air'; this._iframes = 0.45; this._dodgeCd = 0.7;
+      this._atk.type = null;
+    }
+
     const canAttack = !locked && !this._blocking && (this.state === 'ground' || this.state === 'air');
     if (canAttack && input.punchPressed) this._strike('punch', sprint);
     if (canAttack && input.kickPressed) this._strike('kick', sprint);
@@ -356,7 +397,7 @@ export class Player {
   // Taking a hit from an enemy. Small hits stagger/shove; big hits knock him
   // onto his fanny (briefly downed) — so you have to fight smart.
   takeHit(dir, power) {
-    if (this._downed > 0) return;
+    if (this._downed > 0 || this._iframes > 0) return;   // dodged / already down
     // blocking guts the damage and prevents the knockdown — just a shove
     if (this._blocking) {
       this.health = Math.max(0, this.health - power * 0.15);
@@ -645,6 +686,12 @@ export class Player {
       : null;
     const speed01 = Math.min(1, h / MAX_SPRINT);
     this.model.update(dt, pose, speed01, { attack });
+
+    // ground blob shadow under his feet; fades out while airborne/swinging
+    const feetY = this.pos.y - RADIUS;
+    this.blobShadow.position.set(this.pos.x, feetY + 0.04, this.pos.z);
+    const grounded = this.state === 'ground' || this._downed > 0;
+    this.blobShadow.material.opacity += ((grounded ? 0.42 : 0.0) - this.blobShadow.material.opacity) * Math.min(1, dt * 8);
   }
 
   _updateWebs(dt) {

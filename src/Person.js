@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from '../vendor/jsm/utils/BufferGeometryUtils.js';
 
 // Low-poly stylised people for the NYC crowd, the robbers, and the boss.
 // One builder, many types — distinguished by size, palette and a prop or two.
@@ -19,6 +20,56 @@ const TYPES = {
 };
 
 export const PERSON_TYPES = Object.keys(TYPES).filter((t) => t !== 'robber' && t !== 'boss');
+
+// Cheap background pedestrian: every part merged into ONE mesh (single draw
+// call) with baked vertex colours, so we can have big crowds. No limb rig —
+// just a whole-body walk bob / lean / cower. Detailed enemies use makePerson.
+const _sharedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.04 });
+
+export function makeMergedPerson(type, rng = Math.random) {
+  const cfg = TYPES[type] || TYPES.businessman;
+  const s = cfg.h;
+  const parts = [];
+  const add = (geo, hex, x, y, z, sx = 1, sy = 1, sz = 1) => {
+    const g = geo.clone();
+    g.applyMatrix4(new THREE.Matrix4().makeScale(sx, sy, sz));
+    g.applyMatrix4(new THREE.Matrix4().makeTranslation(x, y, z));
+    const col = new THREE.Color(hex); const n = g.attributes.position.count;
+    const c = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    parts.push(g);
+  };
+  // legs, torso, head, hair/cap, arms, hands — static A-pose
+  add(new THREE.CapsuleGeometry(0.07, 0.34, 3, 6), cfg.leg, -0.09, 0.2 * s + 0.02, 0);
+  add(new THREE.CapsuleGeometry(0.07, 0.34, 3, 6), cfg.leg, 0.09, 0.2 * s + 0.02, 0);
+  add(new THREE.CapsuleGeometry(0.17, 0.34, 4, 8), cfg.top, 0, 0.62 * s, 0, 1.05, 1, 0.7);
+  add(new THREE.SphereGeometry(0.15, 10, 8), cfg.skin, 0, 0.95 * s, 0);
+  add(new THREE.SphereGeometry(0.155, 10, 8), cfg.cap || cfg.hair, 0, 1.0 * s, -0.02);
+  add(new THREE.CapsuleGeometry(0.05, 0.3, 3, 5), cfg.top, -0.2, 0.6 * s, 0);
+  add(new THREE.CapsuleGeometry(0.05, 0.3, 3, 5), cfg.top, 0.2, 0.6 * s, 0);
+  add(new THREE.SphereGeometry(0.05, 6, 5), cfg.skin, -0.2, 0.42 * s, 0);
+  add(new THREE.SphereGeometry(0.05, 6, 5), cfg.skin, 0.2, 0.42 * s, 0);
+
+  const geo = mergeGeometries(parts, false);
+  const mesh = new THREE.Mesh(geo, _sharedMat);
+  mesh.castShadow = true;
+  const root = new THREE.Group(); root.add(mesh);
+
+  let t = Math.random() * 10; const baseY = 0;
+  return {
+    root, type, radius: 0.35 * s, height: 1.7 * s,
+    update(dt, pose, speed01 = 0) {
+      t += dt * (5 + speed01 * 7);
+      if (pose === 'cower') { mesh.rotation.x = 0.6; root.position.y = baseY - 0.12; }
+      else if (pose === 'walk') {
+        mesh.rotation.x = 0.05 + speed01 * 0.05;
+        mesh.rotation.z = Math.sin(t) * 0.05;            // sway
+        root.position.y = baseY + Math.abs(Math.sin(t)) * 0.04;
+      } else { mesh.rotation.set(0, 0, 0); root.position.y = baseY; }
+    },
+  };
+}
 
 export function makePerson(type, rng = Math.random) {
   const cfg = TYPES[type] || TYPES.businessman;

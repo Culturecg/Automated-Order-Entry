@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { mergeGeometries } from '../vendor/jsm/utils/BufferGeometryUtils.js';
+
+const _carMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.4, envMapIntensity: 0.85 });
 
 // Moving NYC traffic. Cars drive down the avenues/streets in lanes. Behaviour
 // vs. Spider-Man:
@@ -128,90 +131,58 @@ export class Traffic {
 // ---- car prototypes --------------------------------------------------------
 
 function makeCar(type, rng) {
-  const group = new THREE.Group();
   const palette = [0xb52630, 0x1d3f8c, 0x101216, 0xe8e8ea, 0x2a6e4f, 0x6d7079, 0x8a8d96, 0x394150];
   let color = palette[(rng() * palette.length) | 0];
-  let L = 4.3, W = 1.9, H = 0.55, cabH = 0.5, cabLen = 2.0, cabOff = -0.2, cabColorDark = true;
-
+  let L = 4.3, W = 1.9, H = 0.55, cabH = 0.5, cabLen = 2.0, cabOff = -0.2;
   if (type === 'taxi') { color = 0xf2b500; }
   if (type === 'suv') { L = 4.6; W = 2.0; H = 0.8; cabH = 0.7; cabLen = 2.4; }
   if (type === 'van') { L = 5.0; W = 2.0; H = 0.7; cabH = 1.0; cabLen = 3.2; cabOff = -0.3; }
   if (type === 'sports') { L = 4.2; W = 1.95; H = 0.45; cabH = 0.36; cabLen = 1.7; }
 
-  // patina: worn paint (rougher, a little grime in the metalness/colour)
-  const worn = new THREE.Color(color).multiplyScalar(0.82 + rng() * 0.12);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: worn, roughness: 0.5 + rng() * 0.25, metalness: 0.45, envMapIntensity: 0.85 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x12161c, roughness: 0.08, metalness: 0.8 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: 0x202227, roughness: 0.7, metalness: 0.5 });
-  const dirtMat = new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 0.95 });
+  const worn = new THREE.Color(color).multiplyScalar(0.82 + rng() * 0.12); // patina
+  const GLASS = 0x12161c, TRIM = 0x202227, DIRT = 0x2a2620, PLATE = 0xe8e4cc;
+  const LIGHT = 0xfff2c0, TAIL = 0x661414, WHEEL = 0x0c0c0e;
 
-  // lower body
-  const lower = new THREE.Mesh(new THREE.BoxGeometry(W, H, L), bodyMat);
-  lower.position.y = 0.45 + H / 2;
-  lower.castShadow = true;
-  group.add(lower);
-  // softening: rounded roof edge via a slightly narrower box
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(W * 0.86, cabH, cabLen), glassMat);
-  cabin.position.set(0, 0.45 + H + cabH / 2 - 0.02, cabOff);
-  cabin.castShadow = true;
-  group.add(cabin);
-  // roof cap (body color) for vans/suv
-  if (type === 'van' || type === 'suv') {
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(W * 0.9, 0.08, cabLen), bodyMat);
-    roof.position.set(0, 0.45 + H + cabH, cabOff);
-    group.add(roof);
+  const parts = [];
+  const box = (w, h, d, col, x, y, z, rx) => {
+    const g = new THREE.BoxGeometry(w, h, d);
+    if (rx) g.applyMatrix4(new THREE.Matrix4().makeRotationX(rx));
+    g.applyMatrix4(new THREE.Matrix4().makeTranslation(x, y, z));
+    paint(g, col); parts.push(g);
+  };
+  const cyl = (r, len, col, x, y, z) => {
+    const g = new THREE.CylinderGeometry(r, r, len, 12);
+    g.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI / 2));
+    g.applyMatrix4(new THREE.Matrix4().makeTranslation(x, y, z));
+    paint(g, col); parts.push(g);
+  };
+  function paint(g, hex) {
+    const c = new THREE.Color(hex), n = g.attributes.position.count, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(a, 3));
   }
-  // taxi sign
-  if (type === 'taxi') {
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffcf66, emissiveIntensity: 1.0 }));
-    sign.position.set(0, 0.45 + H + cabH + 0.12, cabOff);
-    group.add(sign);
-  }
-  // grimy lower rocker band (road dirt), bumpers, grille, side window strip, plate
-  const rocker = new THREE.Mesh(new THREE.BoxGeometry(W + 0.02, 0.18, L * 0.96), dirtMat);
-  rocker.position.y = 0.45; group.add(rocker);
-  for (const sz of [1, -1]) {
-    const bump = new THREE.Mesh(new THREE.BoxGeometry(W * 0.96, 0.18, 0.18), trimMat);
-    bump.position.set(0, 0.5, sz * L / 2); group.add(bump);
-  }
-  const grille = new THREE.Mesh(new THREE.BoxGeometry(W * 0.5, 0.16, 0.05), trimMat);
-  grille.position.set(0, 0.62, L / 2 + 0.01); group.add(grille);
+
+  box(W, H, L, worn.getHex(), 0, 0.45 + H / 2, 0);                       // body
+  box(W * 0.86, cabH, cabLen, GLASS, 0, 0.45 + H + cabH / 2 - 0.02, cabOff); // cabin
+  if (type === 'van' || type === 'suv') box(W * 0.9, 0.08, cabLen, worn.getHex(), 0, 0.45 + H + cabH, cabOff);
+  if (type === 'taxi') box(0.5, 0.18, 0.25, 0xffe9a8, 0, 0.45 + H + cabH + 0.12, cabOff);
+  box(W + 0.02, 0.18, L * 0.96, DIRT, 0, 0.45, 0);                      // rocker grime
+  box(W * 0.96, 0.18, 0.18, TRIM, 0, 0.5, L / 2);                       // bumpers
+  box(W * 0.96, 0.18, 0.18, TRIM, 0, 0.5, -L / 2);
+  box(W * 0.5, 0.16, 0.05, TRIM, 0, 0.62, L / 2 + 0.01);               // grille
+  box(0.34, 0.12, 0.03, PLATE, 0, 0.5, -L / 2 - 0.02);                  // plate
   for (const sx of [-1, 1]) {
-    const win = new THREE.Mesh(new THREE.BoxGeometry(0.02, cabH * 0.6, cabLen * 0.8), glassMat);
-    win.position.set(sx * (W * 0.43), 0.45 + H + cabH * 0.55, cabOff); group.add(win);
+    box(0.02, cabH * 0.6, cabLen * 0.8, GLASS, sx * W * 0.43, 0.45 + H + cabH * 0.55, cabOff); // side windows
+    box(0.22, 0.16, 0.06, LIGHT, sx * W * 0.32, 0.55, L / 2);           // headlights
+    box(0.22, 0.16, 0.06, TAIL, sx * W * 0.32, 0.55, -L / 2);           // taillights
   }
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.03),
-    new THREE.MeshStandardMaterial({ color: 0xe8e4cc, roughness: 0.7 }));
-  plate.position.set(0, 0.5, -L / 2 - 0.02); group.add(plate);
-
-  // headlights + taillights
-  const head = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 1.1 });
-  const tail = new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff2222, emissiveIntensity: 0.9 });
-  for (const sx of [-1, 1]) {
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.06), head);
-    hl.position.set(sx * W * 0.32, 0.55, L / 2);
-    group.add(hl);
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.06), tail);
-    tl.position.set(sx * W * 0.32, 0.55, -L / 2);
-    group.add(tl);
-  }
-
-  // wheels
-  const wheels = [];
-  const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.26, 12);
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 0.9 });
   const wx = W / 2 + 0.02, wz = L * 0.32;
-  for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
-    const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(sx * wx, 0.36, sz * wz);
-    w.castShadow = true;
-    group.add(w);
-    wheels.push(w);
-  }
+  for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) cyl(0.36, 0.26, WHEEL, sx * wx, 0.36, sz * wz);
 
-  return { group, wheels, halfLen: L / 2, halfWid: W / 2 };
+  const mesh = new THREE.Mesh(mergeGeometries(parts, false), _carMat);
+  mesh.castShadow = true;
+  const group = new THREE.Group(); group.add(mesh);
+  return { group, wheels: [], halfLen: L / 2, halfWid: W / 2 };
 }
 
 function mulberry32(seed) {

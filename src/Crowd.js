@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makePerson, PERSON_TYPES } from './Person.js';
+import { makePerson, makeMergedPerson, PERSON_TYPES } from './Person.js';
 
 // The living city: a wandering NYC crowd plus the crime/combat loop.
 //   • pedestrians walk the sidewalks, scatter from danger, and block Spidey
@@ -29,19 +29,32 @@ export class Crowd {
     this.robberyCooldown = 4;
     this._tmp = new THREE.Vector3();
 
+    // walking groups: clusters of people that share a destination and move
+    // together, so the crowd clumps like a real sidewalk throng.
+    this.groups = [];
+    const groupCount = Math.max(4, Math.round(pedCount / 5));
+    for (let i = 0; i < groupCount; i++) {
+      const p = this.city.randomSidewalkPoint(Math.random);
+      this.groups.push({ target: new THREE.Vector3(p.x, 0, p.z), retarget: 0 });
+    }
+
     for (let i = 0; i < pedCount; i++) this.people.push(this._spawnPed(true));
   }
 
   _spawnPed(anywhere) {
     const rnd = Math.random;
     const type = PERSON_TYPES[(rnd() * PERSON_TYPES.length) | 0];
-    const person = makePerson(type, rnd);
+    const person = makeMergedPerson(type, rnd);   // cheap single-mesh crowd member
     this.scene.add(person.root);
-    const p = this._pedSpawnPoint(anywhere);
+    const group = (rnd() * this.groups.length) | 0;
+    // spawn near the group so clusters form
+    const gt = this.groups[group].target;
+    let p = this._pedSpawnPoint(anywhere);
+    if (!anywhere && rnd() > 0.3) p = { x: gt.x + (rnd() - 0.5) * 10, z: gt.z + (rnd() - 0.5) * 10 };
     const e = {
       person, role: 'ped', pos: new THREE.Vector3(p.x, GROUND_Y, p.z),
-      vel: new THREE.Vector3(), target: this._wanderTarget(p), state: 'walk',
-      speed: 2 + Math.random() * 1.6, cower: 0, panic: 0,
+      vel: new THREE.Vector3(), group, jitter: new THREE.Vector3((rnd() - 0.5) * 6, 0, (rnd() - 0.5) * 6),
+      state: 'walk', speed: 2.2 + Math.random() * 1.4, cower: 0, panic: 0,
     };
     person.root.position.copy(e.pos);
     return e;
@@ -165,29 +178,37 @@ export class Crowd {
 
   _updatePeds(dt) {
     const player = this.player;
+    // drift each walking group's destination so clusters roam the city
+    for (const g of this.groups) {
+      g.retarget -= dt;
+      if (g.retarget <= 0 || g.target.distanceTo(player.pos) > SPAWN_RADIUS) {
+        const p = this._pedSpawnPoint(false);
+        g.target.set(p.x, 0, p.z); g.retarget = 8 + Math.random() * 10;
+      }
+    }
     for (const e of this.people) {
       // relocate peds that wander too far from the player
       if (e.pos.distanceTo(player.pos) > SPAWN_RADIUS + 40) {
-        const p = this._pedSpawnPoint(false); e.pos.set(p.x, GROUND_Y, p.z);
+        const gt = this.groups[e.group].target;
+        e.pos.set(gt.x + e.jitter.x, GROUND_Y, gt.z + e.jitter.z);
       }
-      // panic if a robbery / boss is near
       const danger = this._nearestDanger(e.pos, 16);
       let pose = 'walk';
       if (danger) {
         e.panic = 1; const away = this._tmp.subVectors(e.pos, danger).setY(0).normalize();
-        e.vel.lerp(away.multiplyScalar(e.speed * 2.2), 0.2); pose = 'walk';
+        e.vel.lerp(away.multiplyScalar(e.speed * 2.2), 0.2);
       } else if (e.cower > 0) {
         e.cower -= dt; e.vel.multiplyScalar(0.7); pose = 'cower';
       } else {
-        // wander toward target
-        const to = this._tmp.subVectors(e.target, e.pos).setY(0);
-        if (to.length() < 2) e.target.copy(this._wanderTarget(e.pos));
+        // steer toward the group's destination (+ each ped's small offset)
+        const gt = this.groups[e.group].target;
+        const to = this._tmp.set(gt.x + e.jitter.x - e.pos.x, 0, gt.z + e.jitter.z - e.pos.z);
+        if (to.length() < 2.5) e.vel.multiplyScalar(0.85);  // mill around when arrived
         else e.vel.lerp(to.normalize().multiplyScalar(e.speed), 0.05);
       }
       e.pos.addScaledVector(e.vel, dt);
       this._keepOnStreet(e);
       this._collidePlayer(e);
-      // face travel
       if (e.vel.lengthSq() > 0.04) e.person.root.rotation.y = Math.atan2(e.vel.x, e.vel.z);
       e.person.root.position.copy(e.pos);
       e.person.update(dt, pose, Math.min(1, e.vel.length() / 4));

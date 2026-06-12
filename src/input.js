@@ -12,6 +12,7 @@ export function createInput(canvas) {
     webReleased: false,
     punchPressed: false,
     kickPressed: false,
+    dodgePressed: false,
     locked: false,
   };
 
@@ -21,6 +22,7 @@ export function createInput(canvas) {
     if (!e.repeat) {
       if (e.code === 'KeyJ') input.punchPressed = true;
       if (e.code === 'KeyK') input.kickPressed = true;
+      if (e.code === 'KeyQ') input.dodgePressed = true;
     }
     // prevent the page from scrolling when using space / arrows
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
@@ -71,6 +73,7 @@ export function createInput(canvas) {
     input.webReleased = false;
     input.punchPressed = false;
     input.kickPressed = false;
+    input.dodgePressed = false;
   };
 
   // Resolve "E" keyboard into the same edge-triggered web press.
