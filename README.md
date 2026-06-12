@@ -50,9 +50,18 @@ Touch controls appear automatically on phones and tablets:
 - **JUMP**, **RUN** (sprint, hold), **CLING** (wall-crawl, hold).
 - Small top-right buttons: **CAM** (camera distance) and **⟳** (respawn).
 
-**Open it on an iPhone via GitHub Pages:** once the Pages deploy finishes, visit
-`https://culturecg.github.io/automated-order-entry/` in Safari, then tap
-**CLICK TO SWING IN**. (See repo Actions tab for the live URL/status.)
+**Open it on an iPhone via GitHub Pages:** visit
+`https://culturecg.github.io/Automated-Order-Entry/` in Safari, then tap
+**CLICK TO SWING IN**.
+
+> **One-time Pages setup (repo admin):** the deploy workflow can't enable Pages
+> by itself. Go to **Settings → Pages → Build and deployment → Source** and
+> select **GitHub Actions**. After that, every push to this branch (or `main`)
+> auto-deploys via `.github/workflows/pages.yml`; watch progress in the
+> **Actions** tab.
+
+**No-deploy alternative (same Wi-Fi):** run `npm start` on a computer, find its
+local IP (e.g. `192.168.x.x`), and open `http://192.168.x.x:8080` in iPhone Safari.
 
 ### Web-swing tips
 - Swing physics are a real pendulum: hold **W** at the bottom of an arc to *pump*
