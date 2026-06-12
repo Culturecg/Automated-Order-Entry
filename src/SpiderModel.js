@@ -61,16 +61,16 @@ export function createSpiderMan() {
   // Eyes: signature swept Spidey lenses (pointed at the inner corner, big
   // rounded outer lobe, tilted up). Flat decals on the front of the head,
   // parented to the unscaled headPivot so they keep their shape.
-  const eyeGeo = new THREE.ShapeGeometry(makeSpideyEye(0.26, 0.30));
+  const eyeGeo = new THREE.ShapeGeometry(makeSpideyEye(0.38, 0.24));
   for (const sx of [-1, 1]) {
     const white = new THREE.Mesh(eyeGeo, eyeMat);
     const rim = new THREE.Mesh(eyeGeo, eyeRimMat);
     for (const part of [white, rim]) {
-      part.scale.set(sx, 1, 1);             // mirror so the point faces centre
-      part.position.set(sx * 0.16, 0.49, 0.47);
-      part.rotation.z = sx * 0.32;          // sweep the outer lobe upward
+      part.scale.set(sx, 1, 1);             // mirror so the sharp point faces centre
+      part.position.set(sx * 0.2, 0.5, 0.46);
+      part.rotation.z = sx * 0.5;           // strong upward-outward sweep
     }
-    rim.position.z = 0.46; rim.scale.set(sx * 1.18, 1.16, 1);
+    rim.position.z = 0.452; rim.scale.set(sx * 1.16, 1.22, 1);
     headPivot.add(rim, white);
   }
 
@@ -299,11 +299,13 @@ function makeMaskTexture(redHex) {
 // Signature Spider-Man eye: a sharp point at the inner corner (-x), sweeping
 // out to a big rounded lobe (+x). Drawn for the right eye; mirror for the left.
 function makeSpideyEye(w, h) {
+  // sharp inner point (left), big rounded outer lobe (right), flat-ish bottom —
+  // the classic comic Spidey lens.
   const s = new THREE.Shape();
-  s.moveTo(-w * 0.5, 0);                                   // inner point
-  s.bezierCurveTo(-w * 0.2, h * 0.62, w * 0.25, h * 0.55, w * 0.45, h * 0.22); // top sweep to outer
-  s.quadraticCurveTo(w * 0.6, 0, w * 0.42, -h * 0.32);     // round outer lobe
-  s.bezierCurveTo(w * 0.1, -h * 0.5, -w * 0.25, -h * 0.32, -w * 0.5, 0); // bottom back to point
+  s.moveTo(-w * 0.5, -h * 0.1);                            // sharp inner point
+  s.bezierCurveTo(-w * 0.25, h * 0.9, w * 0.2, h * 0.95, w * 0.45, h * 0.35); // big top sweep
+  s.quadraticCurveTo(w * 0.62, 0, w * 0.45, -h * 0.45);    // round the outer lobe
+  s.quadraticCurveTo(w * 0.0, -h * 0.7, -w * 0.5, -h * 0.1); // shallow bottom back to point
   return s;
 }
 
