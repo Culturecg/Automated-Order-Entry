@@ -5,7 +5,17 @@
   "description": "Third-person Spider-Man traversal prototype set in NYC (Three.js, no build step).",
   "scripts": {
     "start": "npx serve .",
-    "serve": "python3 -m http.server 8080"
+    "serve": "python3 -m http.server 8080",
+    "build:single": "node tools/build-single.mjs"
   },
-  "keywords": ["spider-man", "threejs", "prototype", "third-person", "webgl"]
+  "keywords": [
+    "spider-man",
+    "threejs",
+    "prototype",
+    "third-person",
+    "webgl"
+  ],
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
 }
