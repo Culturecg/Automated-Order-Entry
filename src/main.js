@@ -5,6 +5,7 @@ import { CameraController } from './CameraController.js';
 import { createInput } from './input.js';
 import { isTouchDevice, setupTouchControls } from './touch.js';
 import { Traffic } from './Traffic.js';
+import { Crowd } from './Crowd.js';
 
 // ---- bootstrap -------------------------------------------------------------
 
@@ -84,13 +85,15 @@ const city = new City(scene);
 const cameraCtrl = new CameraController(camera, city);
 const player = new Player(scene, city, cameraCtrl);
 const traffic = new Traffic(scene, city, LOWFX ? 16 : 28);
+const crowd = new Crowd(scene, city, player);
+player.crowd = crowd;            // enables web-bind + melee
 const input = createInput(canvas);
 
 const TOUCH = isTouchDevice();
 if (TOUCH) setupTouchControls(input);
 
 player.pos.set(0, 40, 0); // drop into the central plaza
-window.__game = { player, cameraCtrl, city, traffic, input }; // debug/automation handle
+window.__game = { player, cameraCtrl, city, traffic, crowd, input }; // debug/automation handle
 
 // keep the sun following the player so shadows stay crisp around them
 function repositionSun() {
@@ -107,6 +110,56 @@ const stateEl = document.getElementById('state-value');
 const startOverlay = document.getElementById('start-overlay');
 const startBtn = document.getElementById('start-btn');
 const controlsPanel = document.getElementById('controls');
+const healthFill = document.getElementById('health-fill');
+const senseEl = document.getElementById('spider-sense');
+const senseArrow = document.getElementById('sense-arrow');
+const senseLabel = document.getElementById('sense-label');
+const vignette = document.getElementById('sense-vignette');
+const objectiveEl = document.getElementById('objective');
+const bossBar = document.getElementById('boss-bar');
+const bossFill = document.getElementById('boss-fill');
+const _proj = new THREE.Vector3();
+
+function updateCombatHud() {
+  healthFill.style.width = player.health + '%';
+  healthFill.style.background = player.health < 30 ? '#e62429' : (player.health < 60 ? '#e6a029' : '#3ad06a');
+
+  const sense = crowd.spiderSense();
+  if (sense) {
+    senseEl.style.display = 'block';
+    vignette.style.opacity = sense.role === 'boss' ? '1' : '0.7';
+    _proj.copy(sense.pos); _proj.project(camera);
+    let x = _proj.x, y = _proj.y;
+    if (_proj.z > 1) { x = -x; y = -y; }      // target behind camera
+    const ang = Math.atan2(y, x);
+    const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    const rad = Math.min(window.innerWidth, window.innerHeight) * 0.3;
+    senseArrow.style.left = (cx + Math.cos(ang) * rad) + 'px';
+    senseArrow.style.top = (cy - Math.sin(ang) * rad) + 'px';
+    senseArrow.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
+    const d = Math.round(player.pos.distanceTo(sense.pos));
+    senseLabel.textContent = sense.role === 'boss' ? '⚠ GREEN GOBLIN'
+      : sense.state === 'flee' ? `CHASE HIM · ${d}m`
+      : (sense.state === 'rob' || sense.state === 'approach') ? `ROBBERY! · ${d}m`
+      : `THREAT · ${d}m`;
+  } else {
+    senseEl.style.display = 'none';
+    vignette.style.opacity = '0';
+  }
+
+  const st = crowd.status();
+  if (st.boss) {
+    objectiveEl.textContent = 'DEFEAT THE GREEN GOBLIN';
+    bossBar.style.display = 'block';
+    bossFill.style.width = Math.max(0, st.boss.hp / st.boss.maxhp * 100) + '%';
+  } else if (st.bossDefeated) {
+    objectiveEl.textContent = 'CITY SAVED ✓';
+    bossBar.style.display = 'none';
+  } else {
+    objectiveEl.textContent = `Stop crime — ${st.neutralized}/15 to draw out the boss`;
+    bossBar.style.display = 'none';
+  }
+}
 
 startBtn.addEventListener('click', () => {
   startOverlay.classList.add('hidden');
@@ -148,6 +201,7 @@ function frame() {
 
   player.update(dt, input);
   traffic.update(dt, player);
+  crowd.update(dt);
 
   // auto-recenter the camera behind Spidey
   const hSpeed = Math.hypot(player.vel.x, player.vel.z);
@@ -165,6 +219,7 @@ function frame() {
   // HUD
   speedEl.textContent = player.speedMph;
   stateEl.textContent = STATE_LABELS[player.state] || player.state.toUpperCase();
+  updateCombatHud();
 
   if (!played && input.locked) {
     played = true;

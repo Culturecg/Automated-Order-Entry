@@ -136,6 +136,12 @@ export class Player {
     this._punchPrev = false;
     this._kickPrev = false;
     this._tmp = new THREE.Vector3();
+    // combat
+    this.crowd = null;            // set by main; enables web-bind + melee
+    this.health = 100;
+    this._downed = 0;             // seconds knocked down (can't act)
+    this.strikeImpact = null;     // {power} on the frame a strike connects
+    this._impacted = false;
 
     this.model = createSpiderMan();
     scene.add(this.model.root);
@@ -186,6 +192,18 @@ export class Player {
     return true;
   }
 
+  // If aiming at a nearby bad guy, web him up instead of swinging.
+  _tryWebBind() {
+    if (!this.crowd) return false;
+    const origin = this.pos.clone().add(new THREE.Vector3(0, 1, 0));
+    const aim = this.cameraCtrl.getLookDir();
+    const e = this.crowd.nearestEnemyInAim(origin, aim, 34);
+    if (!e) return false;
+    this.crowd.bindEnemy(e);
+    this._bindFlash = { to: e.pos.clone().setY(e.pos.y + 0.8), t: 0.3 };
+    return true;
+  }
+
   releaseWeb() {
     if (this.anchor) {
       // the strand stays behind, hanging from the anchor
@@ -219,7 +237,7 @@ export class Player {
       move.copy(fwd).multiplyScalar(ax.y).addScaledVector(right, ax.x);
       moveMag = Math.min(1, Math.hypot(ax.x, ax.y));
     }
-    const hasInput = move.lengthSq() > 0;
+    let hasInput = move.lengthSq() > 0;
     if (hasInput) move.normalize();
     this._moveMag = moveMag;
     this._move = move; // collide() reads this for wall auto-stick
@@ -231,22 +249,33 @@ export class Player {
 
     const sprint = input.down('ShiftLeft') || input.down('ShiftRight');
 
+    // health slowly recovers; while downed he can't act
+    if (this.health < 100) this.health = Math.min(100, this.health + dt * 4);
+    if (this._downed > 0) this._downed -= dt;
+    const locked = this._downed > 0;
+    if (locked) { move.set(0, 0, 0); hasInput = false; this._moveMag = 0; }
+
     // ---- combat: rapid taps chain a 3-hit combo (jab-cross-uppercut /
     //      low-high-360). Hold RUN while striking for the alternate string. ----
     const a = this._atk;
     if (a.t > 0) a.t += dt;
     if (this._comboWindow > 0) this._comboWindow -= dt;
-    if (a.type && a.t >= a.dur && this._comboWindow <= 0) a.type = null; // string ended
+    if (a.type && a.t >= a.dur && this._comboWindow <= 0) { a.type = null; this._impacted = false; }
     if (this._spinYaw > 0) this._spinYaw = Math.max(0, this._spinYaw - dt * (Math.PI * 2 / 0.55));
+    // emit one melee impact event partway through each strike (Crowd consumes it)
+    if (a.type && !this._impacted && a.t >= a.dur * 0.4) {
+      this._impacted = true;
+      this.strikeImpact = { type: a.type, power: a.step };
+    }
 
-    const canAttack = this.state === 'ground' || this.state === 'air';
+    const canAttack = !locked && (this.state === 'ground' || this.state === 'air');
     if (canAttack && input.punchPressed) this._strike('punch', sprint);
     if (canAttack && input.kickPressed) this._strike('kick', sprint);
 
-    // ---- web input (edge-triggered toggle: tap to attach, tap to release) ----
-    if (input.webPressed) {
+    // ---- web input (tap: bind a nearby bad guy if aimed at one, else swing) ----
+    if (input.webPressed && !locked) {
       if (this.state === 'swing') this.releaseWeb();
-      else this.shootWeb();
+      else if (!this._tryWebBind()) this.shootWeb();
     }
     if (input.webReleased) this.releaseWeb();
 
@@ -305,6 +334,23 @@ export class Player {
     this._atk.type = null;
   }
 
+  // Taking a hit from an enemy. Small hits stagger/shove; big hits knock him
+  // onto his fanny (briefly downed) — so you have to fight smart.
+  takeHit(dir, power) {
+    if (this._downed > 0) return;
+    this.health = Math.max(0, this.health - power);
+    this._atk.type = null;
+    if (power >= 16) {
+      this.releaseWeb();
+      this.vel.set(dir.x * 9, 8, dir.z * 9);
+      this.state = 'air';
+      this._downed = 1.3;          // sat down, recovering
+    } else {
+      this.vel.addScaledVector(dir, 6); // shoved back / slowed
+    }
+    if (this.health <= 0) { this.health = 100; this._downed = Math.max(this._downed, 2.2); }
+  }
+
   _strike(type, heavy) {
     const a = this._atk;
     // continue the string if we're mid-combo of the same type, else start fresh
@@ -313,6 +359,7 @@ export class Player {
     const variant = chaining ? a.variant : (heavy ? 'B' : 'A');
     const durs = type === 'kick' ? [0.34, 0.40, 0.56] : [0.24, 0.28, 0.40];
     a.type = type; a.step = step; a.variant = variant; a.t = 0.0001; a.dur = durs[step];
+    this._impacted = false;
     this._comboWindow = a.dur + 0.6; // generous window so a normal tap pace chains
 
     const f = new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
@@ -530,7 +577,8 @@ export class Player {
     const attacking = this._atk.type && this._atk.t < this._atk.dur;
     let pose = 'idle';
     const h = Math.hypot(this.vel.x, this.vel.z);
-    if (this.state === 'swing') pose = 'swing';
+    if (this._downed > 0 && this.state !== 'air') pose = 'land';   // knocked down / recovering
+    else if (this.state === 'swing') pose = 'swing';
     else if (this.state === 'wall') pose = 'climb';
     else if (this.state === 'air') pose = 'air';
     else if (this._landTimer > 0) pose = 'land';
@@ -545,6 +593,16 @@ export class Player {
   }
 
   _updateWebs(dt) {
+    // brief web flash when binding a bad guy
+    if (this._bindFlash) {
+      this._bindFlash.t -= dt;
+      if (this._bindFlash.t <= 0) { this._bindFlash = null; if (!this.anchor) this.webMesh.visible = false; }
+      else {
+        const wrist = this.model.getWristWorld('R', this._tmp).clone();
+        this.webMesh.visible = true;
+        orientSegment(this.webMesh, wrist, this._bindFlash.to);
+      }
+    }
     // active taut cord — fires from the wrist, hand grips the line
     if (this.anchor) {
       const wrist = this.model.getWristWorld('R', this._tmp).clone();

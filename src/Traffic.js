@@ -103,6 +103,20 @@ export class Traffic {
       if (axisVal > this.lim) { if (car.vertical) car.pos.z = -this.lim; else car.pos.x = -this.lim; }
       if (axisVal < -this.lim) { if (car.vertical) car.pos.z = this.lim; else car.pos.x = this.lim; }
 
+      // solid body: don't let Spidey run through a car. Push him out of the
+      // footprint along the shallowest axis (knockback above handles real hits).
+      if (p.y < 2.0 && car.hitCooldown <= 0) {
+        const hw = (car.vertical ? car.halfWid : car.halfLen) + 0.55;
+        const hl = (car.vertical ? car.halfLen : car.halfWid) + 0.55;
+        const dxp = p.x - car.pos.x, dzp = p.z - car.pos.z;
+        if (Math.abs(dxp) < hw && Math.abs(dzp) < hl) {
+          const penX = hw - Math.abs(dxp), penZ = hl - Math.abs(dzp);
+          if (penX < penZ) player.pos.x = car.pos.x + Math.sign(dxp || 1) * hw;
+          else player.pos.z = car.pos.z + Math.sign(dzp || 1) * hl;
+          if (inLane) car.speed = 0; // he's against it → wait
+        }
+      }
+
       car.group.position.copy(car.pos);
       // spin wheels
       const roll = car.speed * dt / 0.34;

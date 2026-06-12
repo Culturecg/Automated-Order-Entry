@@ -30,8 +30,25 @@ export class City {
       new THREE.MeshStandardMaterial({ map: makeAsphaltTexture(span / 8), roughness: 0.96, metalness: 0.0 })
     );
     ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.06;            // below sidewalks/crosswalks (no z-fight)
     ground.receiveShadow = true;
     this.scene.add(ground);
+  }
+
+  // A point on a block's perimeter sidewalk (for spawning pedestrians).
+  randomSidewalkPoint(rnd) {
+    const pitch = this.blockSize + this.street;
+    const start = -this.half + this.blockSize / 2;
+    const n = this.blocks;
+    let cx, cz;
+    do {
+      cx = start + ((rnd() * n) | 0) * pitch;
+      cz = start + ((rnd() * n) | 0) * pitch;
+    } while (Math.abs(cx) < pitch && Math.abs(cz) < pitch); // not the plaza
+    const ring = this.blockSize / 2 + 2.2;
+    const along = (rnd() - 0.5) * this.blockSize;
+    if (rnd() > 0.5) return { x: cx + (rnd() > 0.5 ? ring : -ring), z: cz + along };
+    return { x: cx + along, z: cz + (rnd() > 0.5 ? ring : -ring) };
   }
 
   _buildBuildings() {
@@ -78,16 +95,8 @@ export class City {
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           this.scene.add(mesh);
-
-          // low parapet trim whose TOP is flush with the roof floor (so Spidey
-          // stands ON the roof, not sunk inside a raised rim).
-          const lip = new THREE.Mesh(
-            new THREE.BoxGeometry(w * 1.03, 0.6, d * 1.03),
-            new THREE.MeshStandardMaterial({ color: tint.clone().multiplyScalar(0.7), roughness: 0.8 })
-          );
-          lip.position.set(cx + offset, h - 0.3, cz + offset * 0.3);
-          this.scene.add(lip);
-
+          // (no parapet rim — it z-fought with the roof top and made the
+          //  rooftops glitch; a clean box top reads fine)
           this.buildings.push({ box: new THREE.Box3().setFromObject(mesh), mesh, height: h });
         }
       }
@@ -101,7 +110,7 @@ export class City {
     const pitch = this.blockSize + this.street;
     const start = -this.half + this.blockSize / 2;
     const tex = makeSidewalkTexture();
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0.0 });
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -1 });
 
     const frames = [];
     for (let gx = 0; gx < this.blocks; gx++) {
