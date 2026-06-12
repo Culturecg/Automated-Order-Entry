@@ -164,7 +164,7 @@ function makeCar(type, rng) {
   // taxi sign
   if (type === 'taxi') {
     const sign = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffcf66, emissiveIntensity: 0.6 }));
+      new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffcf66, emissiveIntensity: 1.6 }));
     sign.position.set(0, 0.45 + H + cabH + 0.12, cabOff);
     group.add(sign);
   }
@@ -186,8 +186,8 @@ function makeCar(type, rng) {
   plate.position.set(0, 0.5, -L / 2 - 0.02); group.add(plate);
 
   // headlights + taillights
-  const head = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 0.8 });
-  const tail = new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff2222, emissiveIntensity: 0.7 });
+  const head = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 1.8 });
+  const tail = new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff2222, emissiveIntensity: 1.6 });
   for (const sx of [-1, 1]) {
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.06), head);
     hl.position.set(sx * W * 0.32, 0.55, L / 2);

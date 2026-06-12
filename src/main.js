@@ -6,6 +6,7 @@ import { createInput } from './input.js';
 import { isTouchDevice, setupTouchControls } from './touch.js';
 import { Traffic } from './Traffic.js';
 import { Crowd } from './Crowd.js';
+import { setupPostFX } from './postfx.js';
 
 // ---- bootstrap -------------------------------------------------------------
 
@@ -103,6 +104,11 @@ function repositionSun() {
 }
 scene.add(sun.target);
 
+// ---- cinematic post-processing (bloom / grade / vignette / FXAA) ----------
+// On by default; ?fx=low (or ?fx=off) skips it so low-end phones stay smooth.
+const FXOFF = new URLSearchParams(location.search).get('fx') === 'off';
+const postfx = (LOWFX || FXOFF) ? null : setupPostFX(renderer, scene, camera, 'high');
+
 // ---- HUD refs --------------------------------------------------------------
 
 const speedEl = document.getElementById('speed-value');
@@ -174,6 +180,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (postfx) postfx.setSize(window.innerWidth, window.innerHeight);
 });
 
 // ---- main loop -------------------------------------------------------------
@@ -227,7 +234,7 @@ function frame() {
   }
 
   input.endFrame();
-  renderer.render(scene, camera);
+  if (postfx) postfx.render(dt); else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 
